@@ -36,6 +36,7 @@ estimate_params <- function(response_matrix, rep_id, seed, cond_code) {
       model     = 1,
       itemtype  = "gpcm",
       verbose   = FALSE,
+      SE        = TRUE,
       technical = list(NCYCLES = 3000)
     )
 
