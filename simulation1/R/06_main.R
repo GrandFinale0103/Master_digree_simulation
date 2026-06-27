@@ -153,10 +153,10 @@ run_one_cond <- function(COND_CODE) {
       "IV1_LEVELS", "IV2_LEVELS", "IV3_LEVELS", "IV4_LEVELS",
       "RSN_POS", "RSN_NEG",
       "parse_cond_code", "generate_item_params",
-      "gpcm_sf_prob", "sample_theta", "generate_response",
+      "gpcm_sf_prob", "sample_theta", "find_empty_cats", "generate_response",
       "estimate_params",
       "write_log", "get_log_paths"
-    ))
+    ), envir = environment())
     clusterEvalQ(cl, { library(mirt); library(sn) })
 
     completed_in_run <- foreach(
