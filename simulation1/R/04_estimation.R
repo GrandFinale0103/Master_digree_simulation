@@ -47,24 +47,31 @@ estimate_params <- function(response_matrix, rep_id, seed, cond_code) {
     # SE: IRTpars=TRUE + SE=TRUE로 delta method 적용 SE 추출
     coef_se  <- mirt::coef(mod, simplify = FALSE, IRTpars = TRUE, SE = TRUE)
 
+    # SE 행 안전 추출 헬퍼: rownames에 "SE"가 있으면 사용, 없으면 2번째 행
+    get_se <- function(mat, col) {
+      se_row <- if ("SE" %in% rownames(mat)) "SE" else 2L
+      if (nrow(mat) >= 2L && col %in% colnames(mat)) mat[se_row, col]
+      else NA_real_
+    }
+
     # GroupPars 제외하고 문항 계수만 추출
     item_names <- names(coef_irt)[names(coef_irt) != "GroupPars"]
     df <- do.call(rbind, lapply(item_names, function(nm) {
-      co <- coef_irt[[nm]]   # 추정값 행렬 (행1: 추정값, 행2: SE)
-      se <- coef_se[[nm]]    # SE 행렬 (행1: 추정값, 행2: SE)
+      co <- coef_irt[[nm]]
+      se <- coef_se[[nm]]
       data.frame(
         item      = nm,
         converged = converged,
         a         = co[1, "a"],
-        se_a      = se[2, "a"],
+        se_a      = get_se(se, "a"),
         b1        = co[1, "b1"],
-        se_b1     = se[2, "b1"],
+        se_b1     = get_se(se, "b1"),
         b2        = co[1, "b2"],
-        se_b2     = se[2, "b2"],
+        se_b2     = get_se(se, "b2"),
         b3        = co[1, "b3"],
-        se_b3     = se[2, "b3"],
+        se_b3     = get_se(se, "b3"),
         b4        = co[1, "b4"],
-        se_b4     = se[2, "b4"],
+        se_b4     = get_se(se, "b4"),
         stringsAsFactors = FALSE
       )
     }))
