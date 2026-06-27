@@ -45,8 +45,9 @@ estimate_params <- function(response_matrix, rep_id, seed, cond_code) {
     # 추정값: IRT 모수화 (a, b1-b4)
     coef_irt <- mirt::coef(mod, simplify = FALSE, IRTpars = TRUE)
 
-    # SE: IRTpars=TRUE + SE=TRUE로 delta method 적용 SE 추출
-    coef_se  <- mirt::coef(mod, simplify = FALSE, IRTpars = TRUE, SE = TRUE)
+    # SE: IRTpars=TRUE + printSE=TRUE로 delta method 적용 SE 추출
+    # (simplify=TRUE와 printSE=TRUE는 함께 사용 불가 — simplify=FALSE 유지)
+    coef_se  <- mirt::coef(mod, simplify = FALSE, IRTpars = TRUE, printSE = TRUE)
 
     # SE 행 안전 추출 헬퍼: rownames에 "SE"가 있으면 사용, 없으면 2번째 행
     get_se <- function(mat, col) {
