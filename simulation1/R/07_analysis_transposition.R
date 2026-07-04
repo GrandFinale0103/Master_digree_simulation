@@ -81,9 +81,10 @@ cat(sprintf("  총 %d행 로딩 완료\n", nrow(raw)))
 #   내부 코드(iv4_theta_dist): "pos_skew" / "normal" / "neg_skew" / "uniform"
 #   표시 라벨(iv4_label)     : "정적편포(+0.8)" / "정규분포" / "부적편포(-0.8)" / "균등분포"
 
+# ── 조건 코드 → 실제 값 매핑 (시뮬레이션 설계 변경 시 여기만 수정) ──────────
 IV1_MAP <- c("1" = 3.00, "2" = 3.33, "3" = 3.66)
-IV2_MAP <- c("1" = 2.0,  "2" = 1.5,  "3" = 1.0)
-IV3_MAP <- c("1" = 0.0,  "2" = 1.5,  "3" = 3.0)
+IV2_MAP <- c("1" = 1.5,  "2" = 1.0,  "3" = 0.5)   # 변경: 2/1.5/1 → 1.5/1/0.5
+IV3_MAP <- c("1" = 0.0,  "2" = 0.5,  "3" = 1.0)   # 변경: 0/1.5/3 → 0/0.5/1
 IV4_MAP <- c("1" = "pos_skew", "2" = "normal", "3" = "neg_skew", "4" = "uniform")
 IV4_LABEL <- c(
   "pos_skew" = "정적편포(+0.8)",
@@ -167,25 +168,25 @@ cat(sprintf("저장 완료: output/analysis/transposition_summary.csv (%d행)\n"
 # =============================================================================
 # 6단계: GLM 분석
 # =============================================================================
+# 수치형 IV를 데이터에 실제 존재하는 값으로 factor 생성하는 헬퍼
+# - levels: 데이터의 고유값을 수치 정렬 후 sprintf로 통일된 문자열로 변환
+# - 설계값이 바뀌어도 IV_MAP만 수정하면 factor 생성이 자동 적응
+make_iv_factor <- function(x, fmt = "%.2f", decreasing = FALSE) {
+  vals  <- sort(unique(na.omit(x)), decreasing = decreasing)
+  lvls  <- sprintf(fmt, vals)
+  factor(sprintf(fmt, x), levels = lvls)
+}
+
 glm_data <- long_df %>%
   filter(converged == TRUE, !is.na(transposed)) %>%
   mutate(
-    # sprintf로 소수점 자리수를 고정해 as.character() 부동소수점 표기 불일치 방지
-    iv1 = factor(sprintf("%.2f", iv1_sf4),
-                 levels = c("3.00", "3.33", "3.66"),
-                 labels = c("sf4=3.00", "sf4=3.33", "sf4=3.66")),
-    iv2 = factor(sprintf("%.1f", iv2_b_interval),
-                 levels = c("2.0", "1.5", "1.0"),
-                 labels = c("간격=2.0", "간격=1.5", "간격=1.0")),
-    iv3 = factor(sprintf("%.1f", iv3_b_mean),
-                 levels = c("0.0", "1.5", "3.0"),
-                 labels = c("심각도=0", "심각도=1.5", "심각도=3.0")),
+    iv1 = make_iv_factor(iv1_sf4,        fmt = "%.2f", decreasing = FALSE),
+    iv2 = make_iv_factor(iv2_b_interval, fmt = "%.1f", decreasing = TRUE),
+    iv3 = make_iv_factor(iv3_b_mean,     fmt = "%.1f", decreasing = FALSE),
     iv4 = factor(iv4_theta_dist,
                  levels = c("normal", "pos_skew", "neg_skew", "uniform"),
                  labels = c("정규분포", "정적편포(+)", "부적편포(-)", "균등분포"))
-  ) %>%
-  # 사용되지 않는 factor 수준 제거 (수렴 실패로 특정 수준이 실제 데이터에 없는 경우 대비)
-  mutate(across(c(iv1, iv2, iv3, iv4), droplevels))
+  )
 
 cat(sprintf("\nGLM 분석 대상: %d 반복 (수렴 성공 기준)\n", nrow(glm_data)))
 
