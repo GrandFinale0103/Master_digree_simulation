@@ -318,12 +318,10 @@ for (nm in terms_to_test) {
 print(anova_out[terms_to_test, ], digits = 4)
 cat("\n")
 
-cat("── 오즈비 (Odds Ratio) 및 95% CI — 계수 수준 ──\n")
-or_ci <- tryCatch(
-  exp(cbind(OR = coef(glm_full), confint(glm_full))),
-  error = function(e) exp(cbind(OR = coef(glm_full),
-                                 confint.default(glm_full)))
-)
+cat("── 오즈비 (Odds Ratio) 및 95% CI — 계수 수준 (Wald) ──\n")
+# confint()는 프로파일 우도법으로 대규모 모형에서 수 시간 소요될 수 있음
+# confint.default()는 Wald 방법(표준오차 기반)으로 즉시 계산
+or_ci <- exp(cbind(OR = coef(glm_full), confint.default(glm_full)))
 print(round(or_ci, 4))
 cat("\n")
 
