@@ -1,6 +1,11 @@
 # =============================================================================
-# 08_analysis_rmse_bias.R
+# 09_analysis_rmse_bias.R
 # 문항 1 추정 모수의 편향(Bias)과 RMSE 분석
+#
+# [파일 검증]
+#   - 기대 조건 코드(108개) 대비 실제 파일 존재 여부를 검사
+#   - 누락 조건, 반복 횟수 미달 조건을 로그에 기록
+#   - 존재하는 파일만으로 유연하게 집계
 #
 # 분석 대상: 문항 1 (조작 문항) — a, b1, b2, b3, b4
 #
@@ -10,6 +15,7 @@
 #   (반복마다 동일한 결정론적 값 — 랜덤 성분 없음)
 #
 # 출력 파일:
+#   output/analysis/09_log.txt               — 실행 로그
 #   output/analysis/rmse_bias_long.csv       — 반복별 오차 원자료 (long format)
 #   output/analysis/rmse_bias_summary.csv    — 조건 × 모수별 Bias / RMSE 집계
 #   output/analysis/rmse_bias_plot_b.png     — b1-b4 Bias / RMSE 시각화
@@ -24,6 +30,68 @@ suppressPackageStartupMessages({
 })
 
 dir.create("output/analysis", recursive = TRUE, showWarnings = FALSE)
+
+# ── 로그 시스템 ───────────────────────────────────────────────────────────────
+LOG_PATH  <- "output/analysis/09_log.txt"
+log_lines <- character(0)
+lg <- function(...) {
+  msg <- paste0(...); cat(msg, "\n"); log_lines <<- c(log_lines, msg)
+}
+lg_section <- function(title) lg(sprintf("\n[%s]  %s", Sys.time(), title))
+flush_log  <- function() writeLines(log_lines, LOG_PATH)
+
+# ── 기대 조건 코드 (3×3×3×4 = 108개) ────────────────────────────────────────
+EXPECTED_CONDS <- character(108)
+k <- 0L
+for (d1 in 1:3) for (d2 in 1:3) for (d3 in 1:3) for (d4 in 1:4) {
+  k <- k + 1L; EXPECTED_CONDS[k] <- paste0(d1, d2, d3, d4)
+}
+
+# ── 파일 검증 함수 ────────────────────────────────────────────────────────────
+validate_est_files <- function(files) {
+  lg_section("파일 검증 (est_params)")
+  lg(sprintf("  발견 파일 수: %d", length(files)))
+
+  parse_cond <- function(p) {
+    m <- regmatches(p, regexpr("_cond([0-9]+)_", p))
+    if (length(m) == 0) return(NA_character_)
+    gsub("_cond|_", "", m)
+  }
+
+  found_conds <- sapply(files, parse_cond)
+  reps_tbl    <- sort(table(found_conds[!is.na(found_conds)]))
+
+  missing_conds <- setdiff(EXPECTED_CONDS, names(reps_tbl))
+  extra_conds   <- setdiff(names(reps_tbl), EXPECTED_CONDS)
+
+  if (length(missing_conds) > 0) {
+    lg(sprintf("  [경고] 누락 조건 %d개: %s",
+               length(missing_conds), paste(missing_conds, collapse = ", ")))
+  } else {
+    lg("  누락 조건 없음 (108개 전체 존재)")
+  }
+
+  if (length(extra_conds) > 0) {
+    lg(sprintf("  [경고] 예상 외 조건 %d개: %s",
+               length(extra_conds), paste(extra_conds, collapse = ", ")))
+  }
+
+  if (length(reps_tbl) > 0) {
+    max_reps    <- max(reps_tbl)
+    under_conds <- reps_tbl[reps_tbl < max_reps]
+    lg(sprintf("  최대 반복 횟수: %d", max_reps))
+    if (length(under_conds) > 0) {
+      lg(sprintf("  [경고] 반복 미달 조건 %d개 (기준: %d회):",
+                 length(under_conds), max_reps))
+      for (nm in names(under_conds)) {
+        lg(sprintf("    cond=%s: %d회", nm, under_conds[[nm]]))
+      }
+    } else {
+      lg(sprintf("  모든 조건이 동일 반복 횟수(%d회) 충족", max_reps))
+    }
+  }
+  invisible(NULL)
+}
 
 # ── 조건 코드 → 실제 값 매핑 (시뮬레이션 설계 변경 시 여기만 수정) ──────────
 IV1_MAP <- c("1" = 3.00, "2" = 3.33, "3" = 3.66)
@@ -41,13 +109,20 @@ DISCRIM <- 1   # 고정 변별도
 # =============================================================================
 # 1단계: 추정 모수 CSV 로딩 — 문항 1 행만 추출
 # =============================================================================
+lg_section("1단계: est_params 파일 로딩")
+
 est_files <- list.files(
   path       = "output/estimated_params",
   pattern    = "_est_params\\.csv$",
   full.names = TRUE
 )
-if (length(est_files) == 0) stop("추정 결과 파일이 없습니다. 먼저 시뮬레이션을 실행하세요.")
-cat(sprintf("파일 %d개 로딩 중...\n", length(est_files)))
+if (length(est_files) == 0) {
+  flush_log()
+  stop("추정 결과 파일이 없습니다. 먼저 시뮬레이션을 실행하세요.")
+}
+
+validate_est_files(est_files)
+lg(sprintf("파일 %d개 로딩 중...", length(est_files)))
 
 parse_fname <- function(path) {
   fname <- basename(path)
@@ -81,7 +156,7 @@ read_item1_est <- function(path) {
   data.frame(
     cond_code = meta$cond_code,
     rep_id    = meta$rep_id,
-    converged = isTRUE(item1$converged[1]),
+    converged = as.logical(item1$converged[1]),
     a_est     = item1$a[1],
     b1_est    = item1$b1[1],
     b2_est    = item1$b2[1],
@@ -93,7 +168,7 @@ read_item1_est <- function(path) {
 
 est_list <- lapply(est_files, read_item1_est)
 est_raw  <- do.call(rbind, est_list[!sapply(est_list, is.null)])
-cat(sprintf("  총 %d행 로딩 완료\n", nrow(est_raw)))
+lg(sprintf("  총 %d행 로딩 완료", nrow(est_raw)))
 
 # =============================================================================
 # 2단계: 조건 코드 분해 및 참값 계산
@@ -143,7 +218,7 @@ long_df <- est_raw %>%
   arrange(cond_code, rep_id)
 
 write.csv(long_df, "output/analysis/rmse_bias_long.csv", row.names = FALSE)
-cat(sprintf("저장 완료: output/analysis/rmse_bias_long.csv (%d행)\n", nrow(long_df)))
+lg(sprintf("저장 완료: output/analysis/rmse_bias_long.csv (%d행)", nrow(long_df)))
 
 # =============================================================================
 # 5단계: 조건 × 모수별 Bias / RMSE 집계
@@ -175,7 +250,7 @@ summary_df <- bind_rows(
   arrange(cond_code, param)
 
 write.csv(summary_df, "output/analysis/rmse_bias_summary.csv", row.names = FALSE)
-cat(sprintf("저장 완료: output/analysis/rmse_bias_summary.csv (%d행)\n", nrow(summary_df)))
+lg(sprintf("저장 완료: output/analysis/rmse_bias_summary.csv (%d행)", nrow(summary_df)))
 
 # =============================================================================
 # 6단계: 시각화 공통 설정
@@ -236,7 +311,7 @@ p_bias_b <- ggplot(plot_b,
 
 ggsave("output/analysis/rmse_bias_plot_b_bias.png", p_bias_b,
        width = 14, height = 10, dpi = 150)
-cat("저장 완료: output/analysis/rmse_bias_plot_b_bias.png\n")
+lg("저장 완료: output/analysis/rmse_bias_plot_b_bias.png")
 
 # ── RMSE 그래프 ──
 p_rmse_b <- ggplot(plot_b,
@@ -265,7 +340,7 @@ p_rmse_b <- ggplot(plot_b,
 
 ggsave("output/analysis/rmse_bias_plot_b_rmse.png", p_rmse_b,
        width = 14, height = 10, dpi = 150)
-cat("저장 완료: output/analysis/rmse_bias_plot_b_rmse.png\n")
+lg("저장 완료: output/analysis/rmse_bias_plot_b_rmse.png")
 
 # =============================================================================
 # 8단계: a 모수 Bias / RMSE 시각화
@@ -302,27 +377,31 @@ p_a <- ggplot(plot_a,
 
 ggsave("output/analysis/rmse_bias_plot_a.png", p_a,
        width = 10, height = 8, dpi = 150)
-cat("저장 완료: output/analysis/rmse_bias_plot_a.png\n")
+lg("저장 완료: output/analysis/rmse_bias_plot_a.png")
 
 # =============================================================================
 # 최종 요약
 # =============================================================================
-cat("\n================================================================\n")
-cat("전체 분석 완료\n")
-cat("================================================================\n")
-cat(sprintf("  분석 반복 수 (수렴 성공): %d\n", nrow(long_df)))
-cat(sprintf("  조건 수                 : %d\n", n_distinct(summary_df$cond_code)))
+lg_section("최종 요약")
+lg("================================================================")
+lg("전체 분석 완료")
+lg("================================================================")
+lg(sprintf("  분석 반복 수 (수렴 성공): %d", nrow(long_df)))
+lg(sprintf("  조건 수                 : %d", n_distinct(summary_df$cond_code)))
 
 for (p in c("a", "b1", "b2", "b3", "b4")) {
   sub <- summary_df[summary_df$param == p, ]
-  cat(sprintf("  [%s]  Bias 범위: %+.4f ~ %+.4f  |  RMSE 범위: %.4f ~ %.4f\n",
+  lg(sprintf("  [%s]  Bias 범위: %+.4f ~ %+.4f  |  RMSE 범위: %.4f ~ %.4f",
               p,
               min(sub$bias, na.rm = TRUE), max(sub$bias, na.rm = TRUE),
               min(sub$rmse, na.rm = TRUE), max(sub$rmse, na.rm = TRUE)))
 }
-cat("\n출력 파일:\n")
-cat("  output/analysis/rmse_bias_long.csv\n")
-cat("  output/analysis/rmse_bias_summary.csv\n")
-cat("  output/analysis/rmse_bias_plot_b_bias.png\n")
-cat("  output/analysis/rmse_bias_plot_b_rmse.png\n")
-cat("  output/analysis/rmse_bias_plot_a.png\n")
+lg("\n출력 파일:")
+lg("  output/analysis/09_log.txt")
+lg("  output/analysis/rmse_bias_long.csv")
+lg("  output/analysis/rmse_bias_summary.csv")
+lg("  output/analysis/rmse_bias_plot_b_bias.png")
+lg("  output/analysis/rmse_bias_plot_b_rmse.png")
+lg("  output/analysis/rmse_bias_plot_a.png")
+
+flush_log()

@@ -1,10 +1,16 @@
 # =============================================================================
-# 07_analysis_transposition.R
+# 08_analysis_transposition.R
 # 경계 모수 전치(boundary parameter transposition) 분석
+#
+# [파일 검증]
+#   - 기대 조건 코드(108개) 대비 실제 파일 존재 여부를 검사
+#   - 누락 조건, 반복 횟수 미달 조건을 로그에 기록
+#   - 존재하는 파일만으로 유연하게 집계
 #
 # 분석 대상: 문항 1 (조작 문항)의 추정 경계 모수 b1 < b2 < b3 < b4 순서 유지 여부
 #
 # 출력 파일:
+#   output/analysis/08_log.txt                  — 실행 로그
 #   output/analysis/transposition_long.csv      — 반복별 long format 원자료
 #   output/analysis/transposition_summary.csv   — 조건별 집계 요약
 #   output/analysis/transposition_glm.txt       — GLM 분석 결과 (효과 검정 + 대비)
@@ -20,18 +26,87 @@ suppressPackageStartupMessages({
 
 dir.create("output/analysis", recursive = TRUE, showWarnings = FALSE)
 
+# ── 로그 시스템 ───────────────────────────────────────────────────────────────
+LOG_PATH  <- "output/analysis/08_log.txt"
+log_lines <- character(0)
+lg <- function(...) {
+  msg <- paste0(...); cat(msg, "\n"); log_lines <<- c(log_lines, msg)
+}
+lg_section <- function(title) lg(sprintf("\n[%s]  %s", Sys.time(), title))
+flush_log  <- function() writeLines(log_lines, LOG_PATH)
+
+# ── 기대 조건 코드 (3×3×3×4 = 108개) ────────────────────────────────────────
+EXPECTED_CONDS <- character(108)
+k <- 0L
+for (d1 in 1:3) for (d2 in 1:3) for (d3 in 1:3) for (d4 in 1:4) {
+  k <- k + 1L; EXPECTED_CONDS[k] <- paste0(d1, d2, d3, d4)
+}
+
+# ── 파일 검증 함수 ────────────────────────────────────────────────────────────
+validate_est_files <- function(files) {
+  lg_section("파일 검증 (est_params)")
+  lg(sprintf("  발견 파일 수: %d", length(files)))
+
+  parse_cond <- function(p) {
+    m <- regmatches(p, regexpr("_cond([0-9]+)_", p))
+    if (length(m) == 0) return(NA_character_)
+    gsub("_cond|_", "", m)
+  }
+
+  found_conds <- sapply(files, parse_cond)
+  reps_tbl    <- sort(table(found_conds[!is.na(found_conds)]))
+
+  missing_conds <- setdiff(EXPECTED_CONDS, names(reps_tbl))
+  extra_conds   <- setdiff(names(reps_tbl), EXPECTED_CONDS)
+
+  if (length(missing_conds) > 0) {
+    lg(sprintf("  [경고] 누락 조건 %d개: %s",
+               length(missing_conds), paste(missing_conds, collapse = ", ")))
+  } else {
+    lg("  누락 조건 없음 (108개 전체 존재)")
+  }
+
+  if (length(extra_conds) > 0) {
+    lg(sprintf("  [경고] 예상 외 조건 %d개: %s",
+               length(extra_conds), paste(extra_conds, collapse = ", ")))
+  }
+
+  if (length(reps_tbl) > 0) {
+    max_reps    <- max(reps_tbl)
+    under_conds <- reps_tbl[reps_tbl < max_reps]
+    lg(sprintf("  최대 반복 횟수: %d", max_reps))
+    if (length(under_conds) > 0) {
+      lg(sprintf("  [경고] 반복 미달 조건 %d개 (기준: %d회):",
+                 length(under_conds), max_reps))
+      for (nm in names(under_conds)) {
+        lg(sprintf("    cond=%s: %d회", nm, under_conds[[nm]]))
+      }
+    } else {
+      lg(sprintf("  모든 조건이 동일 반복 횟수(%d회) 충족", max_reps))
+    }
+  }
+  invisible(NULL)
+}
+
 # =============================================================================
 # 1단계: estimated_params CSV 파일 로딩 및 통합
 # =============================================================================
+lg_section("1단계: est_params 파일 로딩")
+
 est_files <- list.files(
   path       = "output/estimated_params",
   pattern    = "_est_params\\.csv$",
   full.names = TRUE
 )
 
-if (length(est_files) == 0) stop("추정 결과 파일이 없습니다. 먼저 시뮬레이션을 실행하세요.")
+if (length(est_files) == 0) {
+  flush_log()
+  stop("추정 결과 파일이 없습니다. 먼저 시뮬레이션을 실행하세요.")
+}
 
-cat(sprintf("파일 %d개 로딩 중...\n", length(est_files)))
+validate_est_files(est_files)
+
+lg(sprintf("파일 %d개 로딩 중...", length(est_files)))
 
 parse_fname <- function(path) {
   fname <- basename(path)
@@ -72,11 +147,12 @@ read_est_file <- function(path) {
 
 raw_list <- lapply(est_files, read_est_file)
 raw      <- do.call(rbind, raw_list[!sapply(raw_list, is.null)])
-cat(sprintf("  총 %d행 로딩 완료\n", nrow(raw)))
+lg(sprintf("  총 %d행 로딩 완료", nrow(raw)))
 
 # =============================================================================
 # 2단계: 조건 코드 분해 (IV1–IV4)
 # =============================================================================
+lg_section("2단계: 조건 코드 분해")
 # IV4 표기:
 #   내부 코드(iv4_theta_dist): "pos_skew" / "normal" / "neg_skew" / "uniform"
 #   표시 라벨(iv4_label)     : "정적편포(+0.8)" / "정규분포" / "부적편포(-0.8)" / "균등분포"
@@ -142,7 +218,7 @@ long_df <- raw %>%
   arrange(cond_code, rep_id)
 
 write.csv(long_df, "output/analysis/transposition_long.csv", row.names = FALSE)
-cat(sprintf("저장 완료: output/analysis/transposition_long.csv (%d행)\n", nrow(long_df)))
+lg(sprintf("저장 완료: output/analysis/transposition_long.csv (%d행)", nrow(long_df)))
 
 # =============================================================================
 # 5단계: 조건별 집계
@@ -162,8 +238,7 @@ summary_df <- long_df %>%
   )
 
 write.csv(summary_df, "output/analysis/transposition_summary.csv", row.names = FALSE)
-cat(sprintf("저장 완료: output/analysis/transposition_summary.csv (%d행)\n",
-            nrow(summary_df)))
+lg(sprintf("저장 완료: output/analysis/transposition_summary.csv (%d행)", nrow(summary_df)))
 
 # =============================================================================
 # 6단계: GLM 분석
@@ -211,30 +286,33 @@ for (iv_name in names(IV_CONFIG)) {
 iv_vars <- names(IV_CONFIG)
 
 # ── 진단 1: 기본 데이터 확인 ─────────────────────────────────────────────────
-cat(sprintf("\nGLM 분석 대상: %d 반복 (수렴 성공 기준)\n", nrow(glm_data)))
-cat(sprintf("  [진단] converged 분포: TRUE=%d, FALSE=%d, NA=%d\n",
+lg_section("6단계: GLM 분석")
+lg(sprintf("GLM 분석 대상: %d 반복 (수렴 성공 기준)", nrow(glm_data)))
+lg(sprintf("  [진단] converged 분포: TRUE=%d, FALSE=%d, NA=%d",
             sum(long_df$converged == TRUE,  na.rm = TRUE),
             sum(long_df$converged == FALSE, na.rm = TRUE),
             sum(is.na(long_df$converged))))
 
 if (nrow(glm_data) == 0) {
+  flush_log()
   stop(paste(
     "수렴 성공 데이터가 없습니다.",
     "→ 추정 결과 파일의 converged 컬럼 또는 시뮬레이션 실행 여부를 확인하세요."
   ))
 }
-cat(sprintf("  [진단] transposed 분포: 0=%d건, 1=%d건, NA=%d건\n",
+lg(sprintf("  [진단] transposed 분포: 0=%d건, 1=%d건, NA=%d건",
             sum(glm_data$transposed == 0, na.rm = TRUE),
             sum(glm_data$transposed == 1, na.rm = TRUE),
             sum(is.na(glm_data$transposed))))
 
 if (isTRUE(var(glm_data$transposed, na.rm = TRUE) == 0)) {
+  flush_log()
   stop("transposed 분산이 0입니다 (모두 동일) — GLM 적합 불가.")
 }
 
-cat("  IV별 실제 관측 수준:\n")
+lg("  IV별 실제 관측 수준:")
 for (v in iv_vars) {
-  cat(sprintf("    %s: %d개 수준 (%s)\n",
+  lg(sprintf("    %s: %d개 수준 (%s)",
               v, nlevels(glm_data[[v]]),
               paste(levels(glm_data[[v]]), collapse = ", ")))
 }
@@ -253,13 +331,13 @@ cell_check <- glm_data %>%
 
 n_sep_zero <- sum(cell_check$prop_trans == 0,   na.rm = TRUE)
 n_sep_one  <- sum(cell_check$prop_trans == 1,   na.rm = TRUE)
-cat(sprintf("\n  [완전 분리 진단] 전치 0%% 셀: %d개, 100%% 셀: %d개 (총 %d셀)\n",
+lg(sprintf("  [완전 분리 진단] 전치 0%% 셀: %d개, 100%% 셀: %d개 (총 %d셀)",
             n_sep_zero, n_sep_one, nrow(cell_check)))
 if (n_sep_zero + n_sep_one > 0) {
-  cat("  ※ 완전 분리 탐지 — Wald χ²=0/p=1 오류 원인 확인됨\n")
-  cat("     우도비 검정(LRT)으로 대체합니다.\n\n")
+  lg("  ※ 완전 분리 탐지 — Wald χ²=0/p=1 오류 원인 확인됨")
+  lg("     우도비 검정(LRT)으로 대체합니다.")
 } else {
-  cat("  완전 분리 없음 — LRT로 진행합니다 (Wald 대비 안정성 우선).\n\n")
+  lg("  완전 분리 없음 — LRT로 진행합니다 (Wald 대비 안정성 우선).")
 }
 
 # ── GLM 모형 적합 ─────────────────────────────────────────────────────────────
@@ -267,17 +345,20 @@ multi_ivs  <- iv_vars[sapply(iv_vars, function(v) nlevels(glm_data[[v]]) >= 2)]
 single_ivs <- setdiff(iv_vars, multi_ivs)
 
 if (length(single_ivs) > 0) {
-  cat(sprintf("  ※ 단일 수준 요인 — 모형 제외: %s\n", paste(single_ivs, collapse = ", ")))
+  lg(sprintf("  ※ 단일 수준 요인 — 모형 제외: %s", paste(single_ivs, collapse = ", ")))
 }
-if (length(multi_ivs) == 0) stop("GLM에 포함 가능한 요인이 없습니다.")
+if (length(multi_ivs) == 0) {
+  flush_log()
+  stop("GLM에 포함 가능한 요인이 없습니다.")
+}
 
 glm_formula <- as.formula(paste("transposed ~", paste(multi_ivs, collapse = " * ")))
-cat(sprintf("  GLM 공식: %s\n\n", deparse(glm_formula)))
+lg(sprintf("  GLM 공식: %s", deparse(glm_formula)))
 
 glm_full <- withCallingHandlers(
   glm(glm_formula, data = glm_data, family = binomial(link = "logit")),
   warning = function(w) {
-    cat(sprintf("  [GLM 경고] %s\n", conditionMessage(w)))
+    lg(sprintf("  [GLM 경고] %s", conditionMessage(w)))
     invokeRestart("muffleWarning")
   }
 )
@@ -393,7 +474,7 @@ for (v in single_ivs) {
 }
 
 sink()
-cat("저장 완료: output/analysis/transposition_glm.txt\n")
+lg("저장 완료: output/analysis/transposition_glm.txt")
 
 # =============================================================================
 # 7단계: 시각화
@@ -431,26 +512,30 @@ p <- ggplot(plot_df,
 
 ggsave("output/analysis/transposition_plot.png", p,
        width = 10, height = 8, dpi = 150)
-cat("저장 완료: output/analysis/transposition_plot.png\n")
+lg("저장 완료: output/analysis/transposition_plot.png")
 
 # =============================================================================
 # 최종 요약
 # =============================================================================
-cat("\n================================================================\n")
-cat("전체 분석 완료\n")
-cat("================================================================\n")
-cat(sprintf("  전체 반복 수        : %d\n", nrow(long_df)))
-cat(sprintf("  수렴 성공           : %d (%.1f%%)\n",
+lg_section("최종 요약")
+lg("================================================================")
+lg("전체 분석 완료")
+lg("================================================================")
+lg(sprintf("  전체 반복 수        : %d", nrow(long_df)))
+lg(sprintf("  수렴 성공           : %d (%.1f%%)",
             sum(long_df$converged, na.rm=TRUE),
             100 * mean(long_df$converged, na.rm=TRUE)))
-cat(sprintf("  전치 발생 (전체)    : %d (%.1f%%)\n",
+lg(sprintf("  전치 발생 (전체)    : %d (%.1f%%)",
             sum(long_df$transposed, na.rm=TRUE),
             100 * mean(long_df$transposed, na.rm=TRUE)))
-cat(sprintf("  전치 비율 범위      : %.1f%% ~ %.1f%%\n",
+lg(sprintf("  전치 비율 범위      : %.1f%% ~ %.1f%%",
             100 * min(summary_df$prop_transposed, na.rm=TRUE),
             100 * max(summary_df$prop_transposed, na.rm=TRUE)))
-cat("\n출력 파일:\n")
-cat("  output/analysis/transposition_long.csv\n")
-cat("  output/analysis/transposition_summary.csv\n")
-cat("  output/analysis/transposition_glm.txt\n")
-cat("  output/analysis/transposition_plot.png\n")
+lg("\n출력 파일:")
+lg("  output/analysis/08_log.txt")
+lg("  output/analysis/transposition_long.csv")
+lg("  output/analysis/transposition_summary.csv")
+lg("  output/analysis/transposition_glm.txt")
+lg("  output/analysis/transposition_plot.png")
+
+flush_log()
