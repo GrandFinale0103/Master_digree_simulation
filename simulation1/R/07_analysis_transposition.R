@@ -170,32 +170,44 @@ cat(sprintf("저장 완료: output/analysis/transposition_summary.csv (%d행)\n"
 glm_data <- long_df %>%
   filter(converged == TRUE, !is.na(transposed)) %>%
   mutate(
-    iv1 = factor(as.character(iv1_sf4),
-                 levels = c("3", "3.33", "3.66"),
+    # sprintf로 소수점 자리수를 고정해 as.character() 부동소수점 표기 불일치 방지
+    iv1 = factor(sprintf("%.2f", iv1_sf4),
+                 levels = c("3.00", "3.33", "3.66"),
                  labels = c("sf4=3.00", "sf4=3.33", "sf4=3.66")),
-    iv2 = factor(as.character(iv2_b_interval),
-                 levels = c("2", "1.5", "1"),
+    iv2 = factor(sprintf("%.1f", iv2_b_interval),
+                 levels = c("2.0", "1.5", "1.0"),
                  labels = c("간격=2.0", "간격=1.5", "간격=1.0")),
-    iv3 = factor(as.character(iv3_b_mean),
-                 levels = c("0", "1.5", "3"),
+    iv3 = factor(sprintf("%.1f", iv3_b_mean),
+                 levels = c("0.0", "1.5", "3.0"),
                  labels = c("심각도=0", "심각도=1.5", "심각도=3.0")),
     iv4 = factor(iv4_theta_dist,
                  levels = c("normal", "pos_skew", "neg_skew", "uniform"),
                  labels = c("정규분포", "정적편포(+)", "부적편포(-)", "균등분포"))
-  )
+  ) %>%
+  # 사용되지 않는 factor 수준 제거 (수렴 실패로 특정 수준이 실제 데이터에 없는 경우 대비)
+  mutate(across(c(iv1, iv2, iv3, iv4), droplevels))
 
 cat(sprintf("\nGLM 분석 대상: %d 반복 (수렴 성공 기준)\n", nrow(glm_data)))
 
-# ── 단일 수준 요인 제거 ────────────────────────────────────────────────────────
-# 데이터에 실제로 존재하는 수준이 2개 이상인 IV만 모형에 포함
-# (일부 조건만 실행된 경우 단일 수준 요인이 생겨 glm()이 에러를 냄)
-iv_vars    <- c("iv1", "iv2", "iv3", "iv4")
+# ── 진단: 각 IV의 실제 관측 수준 확인 ────────────────────────────────────────
+iv_vars <- c("iv1", "iv2", "iv3", "iv4")
+cat("  IV별 실제 관측 수준 수:\n")
+for (v in iv_vars) {
+  cat(sprintf("    %s: %d개 수준 (%s)\n",
+              v,
+              nlevels(glm_data[[v]]),
+              paste(levels(glm_data[[v]]), collapse = ", ")))
+}
+cat("\n")
+
+# ── 실제로 2개 이상 수준을 가진 IV만 모형에 포함 ──────────────────────────────
+# nlevels()는 droplevels() 후 실제 관측 수준 수를 반환
 multi_ivs  <- iv_vars[sapply(iv_vars, function(v) nlevels(glm_data[[v]]) >= 2)]
 single_ivs <- setdiff(iv_vars, multi_ivs)
 
 if (length(single_ivs) > 0) {
   cat(sprintf(
-    "  ※ 아래 요인은 데이터에 수준이 1개뿐이어서 모형에서 제외됩니다: %s\n",
+    "  ※ 아래 요인은 실제 데이터에 수준이 1개뿐이어서 모형에서 제외됩니다: %s\n",
     paste(single_ivs, collapse = ", ")
   ))
 }
