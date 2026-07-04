@@ -28,15 +28,15 @@ N_CAT     <- 5
 N_PERSONS <- 500
 DISCRIM   <- 1
 
-# ── 독립변수 수준 매핑 ───────────────────────────────────────────────────────
+# ── 독립변수 수준 매핑 (수준값 또는 수준 수를 변경해도 전체 코드에 자동 반영) ─
 # 조건코드 첫째 자리: 채점함수 네 번째 값 (sf[4])
 IV1_LEVELS <- c(3, 3.33, 3.66)
 
 # 조건코드 둘째 자리: 경계 모수 간격
-IV2_LEVELS <- c(2, 1.5, 1)
+IV2_LEVELS <- c(1.5, 1, 0.5)
 
 # 조건코드 셋째 자리: 문항 심각도(경계 모수 평균)
-IV3_LEVELS <- c(0, 1.5, 3)
+IV3_LEVELS <- c(0, 0.5, 1)
 
 # 조건코드 넷째 자리: 능력모수 분포
 IV4_LEVELS <- c("pos_skew", "normal", "neg_skew", "uniform")
@@ -73,12 +73,14 @@ find_rsn_params <- function(target_skew) {
 RSN_POS <- find_rsn_params(0.8)   # 정적편포 (skewness ≈ +0.8)
 RSN_NEG <- find_rsn_params(-0.8)  # 부적편포 (skewness ≈ -0.8)
 
-# ── 모든 유효 조건코드 목록 ───────────────────────────────────────────────────
+# ── 모든 유효 조건코드 목록 (각 IV의 수준 수에서 자동 생성) ──────────────────
 ALL_COND_CODES <- character(0)
-for (i1 in 1:3) for (i2 in 1:3) for (i3 in 1:3) for (i4 in 1:4) {
-  ALL_COND_CODES <- c(ALL_COND_CODES, paste0(i1, i2, i3, i4))
-}
-# 총 108개
+for (i1 in seq_along(IV1_LEVELS))
+  for (i2 in seq_along(IV2_LEVELS))
+    for (i3 in seq_along(IV3_LEVELS))
+      for (i4 in seq_along(IV4_LEVELS))
+        ALL_COND_CODES <- c(ALL_COND_CODES, paste0(i1, i2, i3, i4))
+# 총: length(IV1) × length(IV2) × length(IV3) × length(IV4) 개
 
 cat("setup.R 로드 완료 — 조건 수:", length(ALL_COND_CODES), "\n")
 cat(sprintf("  RSN_POS: alpha=%.4f, xi=%.4f, omega=%.4f\n",

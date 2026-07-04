@@ -3,7 +3,7 @@
 # 응답 분포 및 조건별 전치 발생 모수 정리
 #
 # [파일 검증]
-#   - 기대 조건 코드(108개) 대비 실제 파일 존재 여부를 검사
+#   - 기대 조건 코드(IV 수준에서 자동 산출) 대비 실제 파일 존재 여부를 검사
 #   - 누락 조건, 반복 횟수 미달 조건, 응시자 수 분포를 로그에 기록
 #   - 존재하는 파일만으로 유연하게 집계 (N_PERSONS·N_REPS 고정 가정 없음)
 #
@@ -33,18 +33,19 @@ BATCH_SIZE <- 200L
 N_CORES    <- max(1L, detectCores(logical = FALSE) - 1L)
 
 # ── 설계 상수 (IV 매핑) ───────────────────────────────────────────────────────
+# 수준값 또는 수준 수를 변경할 때 이 블록만 수정하면 이후 코드에 자동 반영됨.
 N_CAT   <- 5L    # 응답 범주 수 (0~4)
 IV1_MAP <- c("1" = 3.00, "2" = 3.33, "3" = 3.66)
-IV2_MAP <- c("1" = 1.5,  "2" = 1.0,  "3" = 0.5)
-IV3_MAP <- c("1" = 0.0,  "2" = 0.5,  "3" = 1.0)
+IV2_MAP <- c("1" = 1.5,  "2" = 1.0,  "3" = 0.5)   # 경계모수 간격
+IV3_MAP <- c("1" = 0.0,  "2" = 0.5,  "3" = 1.0)   # 문항 심각도
 IV4_MAP <- c("1" = "pos_skew", "2" = "normal", "3" = "neg_skew", "4" = "uniform")
 
-# 기대 조건 코드 전체 목록 (3×3×3×4 = 108개)
-EXPECTED_CONDS <- character(108)
-k <- 0L
-for (d1 in 1:3) for (d2 in 1:3) for (d3 in 1:3) for (d4 in 1:4) {
-  k <- k + 1L; EXPECTED_CONDS[k] <- paste0(d1, d2, d3, d4)
-}
+# 기대 조건 코드 전체 목록 (IV 수준 수에서 자동 생성)
+EXPECTED_CONDS <- character(0)
+for (d1 in seq_along(IV1_MAP)) for (d2 in seq_along(IV2_MAP))
+  for (d3 in seq_along(IV3_MAP)) for (d4 in seq_along(IV4_MAP))
+    EXPECTED_CONDS <- c(EXPECTED_CONDS, paste0(d1, d2, d3, d4))
+N_CONDS <- length(EXPECTED_CONDS)  # 현재 설계: 108
 
 # ── 로그 시스템 ───────────────────────────────────────────────────────────────
 LOG_PATH  <- "output/analysis/07_log.txt"
@@ -101,7 +102,7 @@ validate_files <- function(files, section_label) {
   under_conds    <- reps_tbl[reps_tbl < max_reps]         # 반복 횟수 미달
 
   lg(sprintf("  전체 파일 수      : %d개", length(files)))
-  lg(sprintf("  발견된 조건 수    : %d / 108개", length(uniq_conds)))
+  lg(sprintf("  발견된 조건 수    : %d / %d개", length(uniq_conds), N_CONDS))
   lg(sprintf("  누락 조건 수      : %d개", length(missing_conds)))
   lg(sprintf("  예상 외 조건 수   : %d개", length(extra_conds)))
   lg(sprintf("  최다 반복 횟수    : %d회 (기준)", max_reps))

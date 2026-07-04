@@ -3,7 +3,7 @@
 # 경계 모수 전치(boundary parameter transposition) 분석
 #
 # [파일 검증]
-#   - 기대 조건 코드(108개) 대비 실제 파일 존재 여부를 검사
+#   - 기대 조건 코드(IV 수준에서 자동 산출) 대비 실제 파일 존재 여부를 검사
 #   - 누락 조건, 반복 횟수 미달 조건을 로그에 기록
 #   - 존재하는 파일만으로 유연하게 집계
 #
@@ -35,12 +35,24 @@ lg <- function(...) {
 lg_section <- function(title) lg(sprintf("\n[%s]  %s", Sys.time(), title))
 flush_log  <- function() writeLines(log_lines, LOG_PATH)
 
-# ── 기대 조건 코드 (3×3×3×4 = 108개) ────────────────────────────────────────
-EXPECTED_CONDS <- character(108)
-k <- 0L
-for (d1 in 1:3) for (d2 in 1:3) for (d3 in 1:3) for (d4 in 1:4) {
-  k <- k + 1L; EXPECTED_CONDS[k] <- paste0(d1, d2, d3, d4)
-}
+# ── 조건 코드 → 실제 값 매핑 (수준값·수준 수 변경 시 이 블록만 수정) ─────────
+IV1_MAP <- c("1" = 3.00, "2" = 3.33, "3" = 3.66)
+IV2_MAP <- c("1" = 1.5,  "2" = 1.0,  "3" = 0.5)   # 경계모수 간격
+IV3_MAP <- c("1" = 0.0,  "2" = 0.5,  "3" = 1.0)   # 문항 심각도
+IV4_MAP <- c("1" = "pos_skew", "2" = "normal", "3" = "neg_skew", "4" = "uniform")
+IV4_LABEL <- c(
+  "pos_skew" = "정적편포(+0.8)",
+  "normal"   = "정규분포",
+  "neg_skew" = "부적편포(-0.8)",
+  "uniform"  = "균등분포"
+)
+
+# 기대 조건 코드 전체 목록 (IV 수준 수에서 자동 생성)
+EXPECTED_CONDS <- character(0)
+for (d1 in seq_along(IV1_MAP)) for (d2 in seq_along(IV2_MAP))
+  for (d3 in seq_along(IV3_MAP)) for (d4 in seq_along(IV4_MAP))
+    EXPECTED_CONDS <- c(EXPECTED_CONDS, paste0(d1, d2, d3, d4))
+N_CONDS <- length(EXPECTED_CONDS)  # 현재 설계: 108
 
 # ── 파일 검증 함수 ────────────────────────────────────────────────────────────
 validate_est_files <- function(files) {
@@ -63,7 +75,7 @@ validate_est_files <- function(files) {
     lg(sprintf("  [경고] 누락 조건 %d개: %s",
                length(missing_conds), paste(missing_conds, collapse = ", ")))
   } else {
-    lg("  누락 조건 없음 (108개 전체 존재)")
+    lg(sprintf("  누락 조건 없음 (%d개 전체 존재)", N_CONDS))
   }
 
   if (length(extra_conds) > 0) {
@@ -156,18 +168,6 @@ lg_section("2단계: 조건 코드 분해")
 # IV4 표기:
 #   내부 코드(iv4_theta_dist): "pos_skew" / "normal" / "neg_skew" / "uniform"
 #   표시 라벨(iv4_label)     : "정적편포(+0.8)" / "정규분포" / "부적편포(-0.8)" / "균등분포"
-
-# ── 조건 코드 → 실제 값 매핑 (시뮬레이션 설계 변경 시 여기만 수정) ──────────
-IV1_MAP <- c("1" = 3.00, "2" = 3.33, "3" = 3.66)
-IV2_MAP <- c("1" = 1.5,  "2" = 1.0,  "3" = 0.5)   # 변경: 2/1.5/1 → 1.5/1/0.5
-IV3_MAP <- c("1" = 0.0,  "2" = 0.5,  "3" = 1.0)   # 변경: 0/1.5/3 → 0/0.5/1
-IV4_MAP <- c("1" = "pos_skew", "2" = "normal", "3" = "neg_skew", "4" = "uniform")
-IV4_LABEL <- c(
-  "pos_skew" = "정적편포(+0.8)",
-  "normal"   = "정규분포",
-  "neg_skew" = "부적편포(-0.8)",
-  "uniform"  = "균등분포"
-)
 
 raw <- raw %>%
   mutate(

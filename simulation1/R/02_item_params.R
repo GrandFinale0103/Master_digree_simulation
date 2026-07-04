@@ -9,8 +9,14 @@
 #   예) "1233" → iv1=1, iv2=1.5, iv3=3, iv4="neg_skew"
 #
 parse_cond_code <- function(code) {
-  if (!grepl("^[123][123][123][1234]$", code)) {
-    stop(sprintf("유효하지 않은 조건 코드: '%s'\n첫째~셋째 자리는 1-3, 넷째 자리는 1-4", code))
+  n1 <- length(IV1_LEVELS); n2 <- length(IV2_LEVELS)
+  n3 <- length(IV3_LEVELS); n4 <- length(IV4_LEVELS)
+  pattern <- sprintf("^[1-%d][1-%d][1-%d][1-%d]$", n1, n2, n3, n4)
+  if (!grepl(pattern, code)) {
+    stop(sprintf(
+      "유효하지 않은 조건 코드: '%s'\n첫째 자리 1-%d, 둘째 자리 1-%d, 셋째 자리 1-%d, 넷째 자리 1-%d",
+      code, n1, n2, n3, n4
+    ))
   }
   digits <- as.integer(strsplit(code, "")[[1]])
   list(
