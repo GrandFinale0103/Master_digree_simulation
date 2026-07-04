@@ -186,9 +186,29 @@ glm_data <- long_df %>%
 
 cat(sprintf("\nGLM 분석 대상: %d 반복 (수렴 성공 기준)\n", nrow(glm_data)))
 
-# ── 완전 요인 모형: 주효과 + 2원(6) + 3원(4) + 4원(1) ────────────────────────
+# ── 단일 수준 요인 제거 ────────────────────────────────────────────────────────
+# 데이터에 실제로 존재하는 수준이 2개 이상인 IV만 모형에 포함
+# (일부 조건만 실행된 경우 단일 수준 요인이 생겨 glm()이 에러를 냄)
+iv_vars    <- c("iv1", "iv2", "iv3", "iv4")
+multi_ivs  <- iv_vars[sapply(iv_vars, function(v) nlevels(glm_data[[v]]) >= 2)]
+single_ivs <- setdiff(iv_vars, multi_ivs)
+
+if (length(single_ivs) > 0) {
+  cat(sprintf(
+    "  ※ 아래 요인은 데이터에 수준이 1개뿐이어서 모형에서 제외됩니다: %s\n",
+    paste(single_ivs, collapse = ", ")
+  ))
+}
+if (length(multi_ivs) == 0) stop("GLM에 포함할 수 있는 요인이 없습니다 (모든 IV가 단일 수준).")
+
+# ── 완전 요인 모형: 가용 요인의 모든 상호작용 포함 ───────────────────────────
+glm_formula <- as.formula(
+  paste("transposed ~", paste(multi_ivs, collapse = " * "))
+)
+cat(sprintf("  GLM 공식: %s\n\n", deparse(glm_formula)))
+
 glm_full <- glm(
-  transposed ~ iv1 * iv2 * iv3 * iv4,
+  glm_formula,
   data   = glm_data,
   family = binomial(link = "logit")
 )
@@ -224,15 +244,17 @@ if (!requireNamespace("emmeans", quietly = TRUE)) {
   install.packages("emmeans", repos = "https://cran.rstudio.com/")
 }
 
-emm_iv1 <- emmeans::emmeans(glm_full, ~ iv1, type = "response")
-emm_iv2 <- emmeans::emmeans(glm_full, ~ iv2, type = "response")
-emm_iv3 <- emmeans::emmeans(glm_full, ~ iv3, type = "response")
-emm_iv4 <- emmeans::emmeans(glm_full, ~ iv4, type = "response")
-
-contrast_iv1 <- emmeans::contrast(emm_iv1, method = "pairwise", adjust = "bonferroni")
-contrast_iv2 <- emmeans::contrast(emm_iv2, method = "pairwise", adjust = "bonferroni")
-contrast_iv3 <- emmeans::contrast(emm_iv3, method = "pairwise", adjust = "bonferroni")
-contrast_iv4 <- emmeans::contrast(emm_iv4, method = "pairwise", adjust = "bonferroni")
+# multi_ivs에 포함된 IV만 emmeans 계산 (단일 수준 IV는 건너뜀)
+emm_list      <- list()
+contrast_list <- list()
+for (v in multi_ivs) {
+  emm_list[[v]]      <- emmeans::emmeans(glm_full,
+                                         as.formula(paste("~", v)),
+                                         type = "response")
+  contrast_list[[v]] <- emmeans::contrast(emm_list[[v]],
+                                          method = "pairwise",
+                                          adjust = "bonferroni")
+}
 
 # =============================================================================
 # GLM 결과 저장
@@ -296,25 +318,19 @@ cat("─────────────────────────
 cat("대비 검정 (Bonferroni 교정, 반응 확률 척도)\n")
 cat("────────────────────────────────────────────────────────────────\n\n")
 
-cat("── IV1 (채점함수 sf4) 주변 평균 ──\n")
-print(emm_iv1)
-cat("\n── IV1 쌍별 대비 ──\n")
-print(contrast_iv1)
-
-cat("\n── IV2 (경계모수 간격) 주변 평균 ──\n")
-print(emm_iv2)
-cat("\n── IV2 쌍별 대비 ──\n")
-print(contrast_iv2)
-
-cat("\n── IV3 (문항 심각도) 주변 평균 ──\n")
-print(emm_iv3)
-cat("\n── IV3 쌍별 대비 ──\n")
-print(contrast_iv3)
-
-cat("\n── IV4 (능력모수 분포) 주변 평균 ──\n")
-print(emm_iv4)
-cat("\n── IV4 쌍별 대비 ──\n")
-print(contrast_iv4)
+iv_labels <- c(iv1 = "IV1 (채점함수 sf4)",
+               iv2 = "IV2 (경계모수 간격)",
+               iv3 = "IV3 (문항 심각도)",
+               iv4 = "IV4 (능력모수 분포)")
+for (v in multi_ivs) {
+  cat(sprintf("\n── %s 주변 평균 ──\n", iv_labels[v]))
+  print(emm_list[[v]])
+  cat(sprintf("\n── %s 쌍별 대비 ──\n", iv_labels[v]))
+  print(contrast_list[[v]])
+}
+for (v in single_ivs) {
+  cat(sprintf("\n── %s: 수준이 1개뿐이어서 대비 생략 ──\n", iv_labels[v]))
+}
 
 sink()
 cat("저장 완료: output/analysis/transposition_glm.txt\n")
