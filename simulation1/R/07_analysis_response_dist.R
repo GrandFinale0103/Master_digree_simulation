@@ -269,6 +269,7 @@ if (length(resp_files) == 0) {
 
 # =============================================================================
 # ■ 테이블 3: 조건별 전치 발생 경계모수 쌍 정리 (est_params 파일 기반)
+#   응답 파일과 동일한 배치-병렬-accumulator 패턴 적용
 # =============================================================================
 est_files <- list.files(
   path = "output/estimated_params", pattern = "_est_params\\.csv$", full.names = TRUE
@@ -277,96 +278,179 @@ est_files <- list.files(
 if (length(est_files) == 0) {
   warning("추정 결과 파일이 없습니다. 테이블 3은 생성하지 않습니다.")
 } else {
-  cat(sprintf("\n추정 파라미터 파일 %d개 로딩 중 (테이블 3)...\n", length(est_files)))
 
-  USE_FREAD2 <- requireNamespace("data.table", quietly = TRUE)
-  read_est   <- if (USE_FREAD2)
+  USE_FREAD3 <- requireNamespace("data.table", quietly = TRUE)
+  read_est <- if (USE_FREAD3)
     function(p) data.table::fread(p, data.table = FALSE, showProgress = FALSE)
   else
     function(p) read.csv(p, stringsAsFactors = FALSE)
 
-  read_trans_pairs <- function(path) {
-    meta <- parse_fname(path)
-    iv   <- decode_cond(meta$cond_code)
+  n_est     <- length(est_files)
+  n_bat_est <- ceiling(n_est / BATCH_SIZE)
+  cat(sprintf("\n추정 파라미터 파일 %d개 처리 시작 (코어 %d개, 배치 %d파일)\n",
+              n_est, N_CORES, BATCH_SIZE))
 
-    df <- tryCatch(read_est(path), error = function(e) NULL)
+  # ── 단일 est_params 파일 처리 함수 ───────────────────────────────────────────
+  process_one_est <- function(path, read_fn, iv1, iv2, iv3, iv4,
+                              decode_fn, parse_fn) {
+    meta <- parse_fn(path)
+    iv   <- decode_fn(meta$cond_code)
+
+    df <- tryCatch(read_fn(path), error = function(e) NULL)
     if (is.null(df)) return(NULL)
 
+    # 추정 실패 파일 처리
     if ("success" %in% names(df) && !isTRUE(as.logical(df$success[1]))) {
-      return(data.frame(
-        cond_code=meta$cond_code, rep_id=meta$rep_id,
-        iv1_sf4=iv$iv1_sf4, iv2_b_interval=iv$iv2_b_interval,
-        iv3_b_mean=iv$iv3_b_mean, iv4_theta_dist=iv$iv4_theta_dist,
-        converged=FALSE,
-        b1=NA_real_, b2=NA_real_, b3=NA_real_, b4=NA_real_,
-        trans_any=NA_integer_, trans_12=NA_integer_,
-        trans_23=NA_integer_,  trans_34=NA_integer_,
-        stringsAsFactors=FALSE
+      return(list(
+        row = c(meta$cond_code, meta$rep_id,
+                iv$iv1_sf4, iv$iv2_b_interval, iv$iv3_b_mean, iv$iv4_theta_dist,
+                "FALSE", NA,NA,NA,NA, NA,NA,NA,NA),
+        cond_code = meta$cond_code, iv = iv,
+        conv = FALSE, tany = NA, t12 = NA, t23 = NA, t34 = NA
       ))
     }
 
     item1 <- df[df$item %in% c("Item1","item1",1), ]
-    if (nrow(item1) == 0) item1 <- df[1, ]
+    if (nrow(item1) == 0L) item1 <- df[1L, ]
 
     b1 <- item1$b1[1]; b2 <- item1$b2[1]
     b3 <- item1$b3[1]; b4 <- item1$b4[1]
-    conv <- as.logical(item1$converged[1])
+    conv <- isTRUE(as.logical(item1$converged[1]))
 
-    if (isTRUE(conv) && !anyNA(c(b1,b2,b3,b4))) {
+    if (conv && !anyNA(c(b1, b2, b3, b4))) {
       t12 <- as.integer(b1 >= b2); t23 <- as.integer(b2 >= b3)
-      t34 <- as.integer(b3 >= b4); tany <- as.integer(t12|t23|t34)
+      t34 <- as.integer(b3 >= b4); tany <- as.integer(t12 | t23 | t34)
     } else {
       t12 <- t23 <- t34 <- tany <- NA_integer_
     }
 
-    data.frame(
-      cond_code=meta$cond_code, rep_id=meta$rep_id,
-      iv1_sf4=iv$iv1_sf4, iv2_b_interval=iv$iv2_b_interval,
-      iv3_b_mean=iv$iv3_b_mean, iv4_theta_dist=iv$iv4_theta_dist,
-      converged=isTRUE(conv),
-      b1=b1, b2=b2, b3=b3, b4=b4,
-      trans_any=tany, trans_12=t12, trans_23=t23, trans_34=t34,
-      stringsAsFactors=FALSE
+    list(
+      # Table 3a 행: character vector (write.table 최적화)
+      row = c(meta$cond_code, meta$rep_id,
+              iv$iv1_sf4, iv$iv2_b_interval, iv$iv3_b_mean, iv$iv4_theta_dist,
+              as.character(conv), b1, b2, b3, b4, tany, t12, t23, t34),
+      # Table 3b accumulator 갱신 정보
+      cond_code = meta$cond_code, iv = iv,
+      conv = conv, tany = tany, t12 = t12, t23 = t23, t34 = t34
     )
   }
 
-  # est_params 파일은 작으므로 단순 lapply 사용
-  trans_list <- lapply(est_files, read_trans_pairs)
-  trans_raw  <- do.call(rbind, trans_list[!sapply(trans_list, is.null)])
-  cat(sprintf("  총 %d행 로딩 완료\n", nrow(trans_raw)))
+  # ── Table 3a: 헤더 먼저 쓰기 ─────────────────────────────────────────────────
+  T3_PATH <- "output/analysis/transposition_pairs_rep.csv"
+  T3_COLS <- c("cond_code","rep_id","iv1_sf4","iv2_b_interval",
+               "iv3_b_mean","iv4_theta_dist","converged",
+               "b1","b2","b3","b4","trans_any","trans_12","trans_23","trans_34")
+  writeLines(paste(T3_COLS, collapse = ","), T3_PATH)
 
-  trans_raw <- trans_raw[order(trans_raw$cond_code, trans_raw$rep_id), ]
-  write.csv(trans_raw, "output/analysis/transposition_pairs_rep.csv", row.names = FALSE)
-  cat(sprintf("  저장 완료: output/analysis/transposition_pairs_rep.csv (%d행)\n",
-              nrow(trans_raw)))
+  # ── Table 3b: 조건별 누적 합계 accumulator ───────────────────────────────────
+  # key = cond_code → list(iv 정보, n_reps, n_conv, n_any, n_12, n_23, n_34)
+  acc3_env <- new.env(hash = TRUE, parent = emptyenv())
 
-  grp <- c("cond_code","iv1_sf4","iv2_b_interval","iv3_b_mean","iv4_theta_dist")
-  pairs_cond <- do.call(rbind, lapply(split(trans_raw, trans_raw$cond_code), function(d) {
-    nc  <- sum(d$converged, na.rm=TRUE)
+  total_t3_rows <- 0L
+
+  for (b in seq_len(n_bat_est)) {
+    idx_s <- (b - 1L) * BATCH_SIZE + 1L
+    idx_e <- min(b * BATCH_SIZE, n_est)
+    batch <- est_files[idx_s:idx_e]
+
+    # 병렬 실행
+    if (N_CORES > 1L) {
+      cl <- makeCluster(N_CORES)
+      on.exit(stopCluster(cl), add = TRUE)
+      clusterExport(cl,
+        c("read_est", "USE_FREAD3", "IV1_MAP", "IV2_MAP", "IV3_MAP", "IV4_MAP",
+          "decode_cond", "parse_fname", "process_one_est"),
+        envir = environment())
+      results <- parLapply(cl, batch, function(p)
+        process_one_est(p, read_est, IV1_MAP, IV2_MAP, IV3_MAP, IV4_MAP,
+                        decode_cond, parse_fname))
+      stopCluster(cl)
+      on.exit(NULL)
+    } else {
+      results <- lapply(batch, function(p)
+        process_one_est(p, read_est, IV1_MAP, IV2_MAP, IV3_MAP, IV4_MAP,
+                        decode_cond, parse_fname))
+    }
+
+    results <- results[!sapply(results, is.null)]
+    if (length(results) == 0L) next
+
+    # ── Table 3a: 배치 append 쓰기 ─────────────────────────────────────────
+    t3_batch <- do.call(rbind, lapply(results, `[[`, "row"))
+    write.table(t3_batch, T3_PATH,
+                append = TRUE, sep = ",",
+                row.names = FALSE, col.names = FALSE, quote = FALSE)
+    total_t3_rows <- total_t3_rows + nrow(t3_batch)
+
+    # ── Table 3b accumulator 갱신 ───────────────────────────────────────────
+    for (res in results) {
+      key <- res$cond_code
+      if (exists(key, envir = acc3_env, inherits = FALSE)) {
+        old <- get(key, envir = acc3_env)
+        old$n_reps <- old$n_reps + 1L
+        old$n_conv <- old$n_conv + as.integer(isTRUE(res$conv))
+        old$n_any  <- old$n_any  + ifelse(is.na(res$tany), 0L, res$tany)
+        old$n_12   <- old$n_12   + ifelse(is.na(res$t12),  0L, res$t12)
+        old$n_23   <- old$n_23   + ifelse(is.na(res$t23),  0L, res$t23)
+        old$n_34   <- old$n_34   + ifelse(is.na(res$t34),  0L, res$t34)
+        assign(key, old, envir = acc3_env)
+      } else {
+        assign(key, list(
+          cond_code      = res$cond_code,
+          iv1_sf4        = res$iv$iv1_sf4,
+          iv2_b_interval = res$iv$iv2_b_interval,
+          iv3_b_mean     = res$iv$iv3_b_mean,
+          iv4_theta_dist = res$iv$iv4_theta_dist,
+          n_reps = 1L,
+          n_conv = as.integer(isTRUE(res$conv)),
+          n_any  = ifelse(is.na(res$tany), 0L, res$tany),
+          n_12   = ifelse(is.na(res$t12),  0L, res$t12),
+          n_23   = ifelse(is.na(res$t23),  0L, res$t23),
+          n_34   = ifelse(is.na(res$t34),  0L, res$t34)
+        ), envir = acc3_env)
+      }
+    }
+
+    rm(results, t3_batch)
+    gc(verbose = FALSE)
+
+    cat(sprintf("\r  진행: %d / %d 배치 완료 (%d / %d 파일)...",
+                b, n_bat_est, idx_e, n_est))
+  }
+  cat("\n")
+  cat(sprintf("  저장 완료: %s (%d행)\n", T3_PATH, total_t3_rows))
+
+  # ── Table 3b: accumulator → 집계 후 저장 ─────────────────────────────────
+  pairs_cond <- do.call(rbind, lapply(ls(envir = acc3_env), function(key) {
+    a  <- get(key, envir = acc3_env)
+    nc <- a$n_conv
     data.frame(
-      cond_code      = d$cond_code[1],
-      iv1_sf4        = d$iv1_sf4[1],
-      iv2_b_interval = d$iv2_b_interval[1],
-      iv3_b_mean     = d$iv3_b_mean[1],
-      iv4_theta_dist = d$iv4_theta_dist[1],
-      n_reps         = nrow(d),
+      cond_code      = a$cond_code,
+      iv1_sf4        = a$iv1_sf4,
+      iv2_b_interval = a$iv2_b_interval,
+      iv3_b_mean     = a$iv3_b_mean,
+      iv4_theta_dist = a$iv4_theta_dist,
+      n_reps         = a$n_reps,
       n_converged    = nc,
-      pct_converged  = 100*nc/nrow(d),
-      n_trans_any    = sum(d$trans_any,  na.rm=TRUE),
-      pct_trans_any  = 100*sum(d$trans_any,  na.rm=TRUE)/nc,
-      n_trans_12     = sum(d$trans_12,   na.rm=TRUE),
-      pct_trans_12   = 100*sum(d$trans_12,   na.rm=TRUE)/nc,
-      n_trans_23     = sum(d$trans_23,   na.rm=TRUE),
-      pct_trans_23   = 100*sum(d$trans_23,   na.rm=TRUE)/nc,
-      n_trans_34     = sum(d$trans_34,   na.rm=TRUE),
-      pct_trans_34   = 100*sum(d$trans_34,   na.rm=TRUE)/nc,
+      pct_converged  = 100 * nc / a$n_reps,
+      n_trans_any    = a$n_any,
+      pct_trans_any  = if (nc > 0) 100 * a$n_any / nc else NA_real_,
+      n_trans_12     = a$n_12,
+      pct_trans_12   = if (nc > 0) 100 * a$n_12  / nc else NA_real_,
+      n_trans_23     = a$n_23,
+      pct_trans_23   = if (nc > 0) 100 * a$n_23  / nc else NA_real_,
+      n_trans_34     = a$n_34,
+      pct_trans_34   = if (nc > 0) 100 * a$n_34  / nc else NA_real_,
       stringsAsFactors = FALSE
     )
   }))
+
   pairs_cond <- pairs_cond[order(pairs_cond$cond_code), ]
-  write.csv(pairs_cond, "output/analysis/transposition_pairs_cond.csv", row.names=FALSE)
+  write.csv(pairs_cond, "output/analysis/transposition_pairs_cond.csv", row.names = FALSE)
   cat(sprintf("  저장 완료: output/analysis/transposition_pairs_cond.csv (%d행)\n",
               nrow(pairs_cond)))
+
+  rm(acc3_env); gc(verbose = FALSE)
 }
 
 # =============================================================================
