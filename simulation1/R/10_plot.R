@@ -29,7 +29,7 @@ dir.create("output/analysis", recursive = TRUE, showWarnings = FALSE)
 
 # ── IV4 영어 라벨 매핑 ────────────────────────────────────────────────────────
 IV4_EN_LEVELS <- c("normal", "pos_skew", "neg_skew", "uniform")
-IV4_EN_LABELS <- c("Normal", "Positively Skewed", "Negatively Skewed", "Uniform")
+IV4_EN_LABELS <- c("Normal", "Negatively Skewed", "Positively Skewed", "Uniform")
 
 # ── factor 헬퍼 ───────────────────────────────────────────────────────────────
 make_num_factor <- function(x, fmt, decreasing = FALSE) {
