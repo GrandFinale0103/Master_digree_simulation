@@ -76,7 +76,7 @@ if (!file.exists(trans_path)) {
     scale_fill_brewer(palette = "Set1") +
     labs(
       x    = "b-parameter Mean (IV3)",
-      y    = "Transposition Rate",
+      y    = "Reversal Rate",
       fill = "Ability Distribution (IV4)"
     ) +
     theme_bw(base_size = 14) +
