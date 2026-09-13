@@ -164,7 +164,7 @@ run_one_cond <- function(COND_CODE) {
       "gpcm_sf_prob", "sample_theta", "generate_response",
       "estimate_params",
       "write_log", "get_log_paths"
-    ))
+    ), envir = environment())
     clusterEvalQ(cl, { library(mirt) })
 
     completed_in_run <- foreach(
