@@ -156,14 +156,19 @@ run_one_cond <- function(COND_CODE) {
     cl <- makeCluster(N_CORES)
     registerDoParallel(cl)
 
+    # 전역 함수/변수 export (envir = .GlobalEnv)
     clusterExport(cl, varlist = c(
-      "cond_params", "COND_CODE", "cond_seeds", "log_paths", "progress_file",
+      "run_one_rep",
       "N_ITEMS", "N_CAT", "N_PERSONS", "DISCRIM",
       "IV1_LEVELS", "IV2_LEVELS", "IV3_LEVELS", "IV4_LEVELS",
       "parse_cond_code", "generate_item_params",
       "gpcm_sf_prob", "sample_theta", "generate_response",
       "estimate_params",
       "write_log", "get_log_paths"
+    ), envir = .GlobalEnv)
+    # 조건별 지역 변수 export (envir = environment())
+    clusterExport(cl, varlist = c(
+      "cond_params", "COND_CODE", "cond_seeds", "log_paths", "progress_file"
     ), envir = environment())
     clusterEvalQ(cl, { library(mirt) })
 
