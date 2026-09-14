@@ -162,7 +162,7 @@ run_one_cond <- function(COND_CODE) {
       "N_ITEMS", "N_CAT", "N_PERSONS", "DISCRIM",
       "IV1_LEVELS", "IV2_LEVELS", "IV3_LEVELS", "IV4_LEVELS",
       "parse_cond_code", "generate_item_params",
-      "gpcm_sf_prob", "sample_theta", "generate_response",
+      "gpcm_sf_prob", "sample_theta", "find_empty_cats", "generate_response",
       "estimate_params",
       "write_log", "get_log_paths"
     ), envir = .GlobalEnv)
