@@ -157,6 +157,7 @@ run_one_cond <- function(COND_CODE) {
     registerDoParallel(cl)
 
     # 전역 함수/변수 export (envir = .GlobalEnv)
+    # 전역 함수/변수 export
     clusterExport(cl, varlist = c(
       "run_one_rep",
       "N_ITEMS", "N_CAT", "N_PERSONS", "DISCRIM",
@@ -164,13 +165,19 @@ run_one_cond <- function(COND_CODE) {
       "parse_cond_code", "generate_item_params",
       "gpcm_sf_prob", "sample_theta", "find_empty_cats", "generate_response",
       "estimate_params",
-      "write_log", "get_log_paths"
+      "write_log", "get_log_paths", "merge_temp_logs"
     ), envir = .GlobalEnv)
-    # 조건별 지역 변수 export (envir = environment())
+    # 조건별 지역 변수 export
     clusterExport(cl, varlist = c(
       "cond_params", "COND_CODE", "cond_seeds", "log_paths", "progress_file"
     ), envir = environment())
-    clusterEvalQ(cl, { library(mirt) })
+    # 워커 working directory 및 패키지 설정
+    wd <- getwd()
+    clusterExport(cl, varlist = "wd", envir = environment())
+    clusterEvalQ(cl, {
+      setwd(wd)
+      library(mirt)
+    })
 
     completed_in_run <- foreach(
       rep_id = remaining_reps,
