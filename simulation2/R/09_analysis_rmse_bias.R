@@ -11,6 +11,8 @@
 #   output/analysis/09_log.txt
 #   output/analysis/rmse_bias_long.csv
 #   output/analysis/rmse_bias_summary.csv
+#   output/analysis/bias_rmse_anova.txt       ← Bias/RMSE ANOVA 결과
+#   output/analysis/bias_ttest_by_cond.csv    ← 조건별 t검정 + FDR 보정
 #   output/analysis/rmse_bias_plot_b_bias.png
 #   output/analysis/rmse_bias_plot_b_rmse.png
 #   output/analysis/rmse_bias_plot_a.png
@@ -225,6 +227,189 @@ summary_df <- bind_rows(
 
 write.csv(summary_df, "output/analysis/rmse_bias_summary.csv", row.names = FALSE)
 lg(sprintf("저장 완료: output/analysis/rmse_bias_summary.csv (%d행)", nrow(summary_df)))
+
+# =============================================================================
+# 5-A단계: ANOVA — Bias / RMSE 조건 간 차이 검정
+# =============================================================================
+lg_section("5-A단계: ANOVA (Bias & RMSE)")
+
+# ── 분석 데이터 준비 ──────────────────────────────────────────────────────────
+# b1~b4 오차를 long format으로 변환 (a 모수 제외: 연구 관심사 = b 모수)
+anova_long <- long_df %>%
+  select(rep_id, iv1_sf4, iv2_b_interval, iv3_b_mean,
+         err_b1, err_b2, err_b3, err_b4) %>%
+  pivot_longer(
+    cols      = starts_with("err_b"),
+    names_to  = "param",
+    values_to = "err"
+  ) %>%
+  mutate(
+    param = factor(param,
+                   levels = c("err_b1","err_b2","err_b3","err_b4"),
+                   labels = c("b1","b2","b3","b4")),
+    # IV를 순서형 요인으로 변환 (IV4는 1수준 → 제외)
+    f_iv1 = factor(iv1_sf4),
+    f_iv2 = factor(iv2_b_interval),
+    f_iv3 = factor(iv3_b_mean),
+    err2  = err^2   # RMSE ANOVA용 종속변수
+  )
+
+lg(sprintf("  ANOVA 데이터: %d행 (b1~b4 × 수렴 성공 반복)", nrow(anova_long)))
+
+# ── Bias ANOVA ────────────────────────────────────────────────────────────────
+# 종속변수: err (오차 원값) → 조건별 평균이 Bias
+# 모형: err ~ param * f_iv1 * f_iv2 * f_iv3
+# → param(b1~b4)도 요인으로 포함하여 모수 × 조건 상호작용 확인
+lg("  [Bias ANOVA] 모형 적합 중...")
+fit_bias <- withCallingHandlers(
+  aov(err ~ param * f_iv1 * f_iv2 * f_iv3, data = anova_long),
+  warning = function(w) {
+    lg(sprintf("  [경고] %s", conditionMessage(w)))
+    invokeRestart("muffleWarning")
+  }
+)
+anova_bias <- summary(fit_bias)[[1]]
+
+# eta-squared (효과 크기)
+ss_total_bias <- sum(anova_bias[, "Sum Sq"])
+anova_bias$eta_sq <- anova_bias[, "Sum Sq"] / ss_total_bias
+
+lg("  [Bias ANOVA] 완료")
+
+# ── RMSE ANOVA ────────────────────────────────────────────────────────────────
+# 종속변수: err^2 (제곱 오차) → 조건별 평균의 제곱근이 RMSE
+lg("  [RMSE ANOVA] 모형 적합 중...")
+fit_rmse <- withCallingHandlers(
+  aov(err2 ~ param * f_iv1 * f_iv2 * f_iv3, data = anova_long),
+  warning = function(w) {
+    lg(sprintf("  [경고] %s", conditionMessage(w)))
+    invokeRestart("muffleWarning")
+  }
+)
+anova_rmse <- summary(fit_rmse)[[1]]
+ss_total_rmse <- sum(anova_rmse[, "Sum Sq"])
+anova_rmse$eta_sq <- anova_rmse[, "Sum Sq"] / ss_total_rmse
+
+lg("  [RMSE ANOVA] 완료")
+
+# ── 조건별 Bias t검정 (단일표본, mu=0) + FDR 보정 ────────────────────────────
+lg("  [조건별 Bias t검정] 진행 중...")
+
+ttest_rows <- list()
+for (p in c("b1","b2","b3","b4")) {
+  sub <- anova_long %>% filter(param == p)
+  cond_list <- unique(sub[, c("iv1_sf4","iv2_b_interval","iv3_b_mean")])
+
+  for (i in seq_len(nrow(cond_list))) {
+    iv1_val <- cond_list$iv1_sf4[i]
+    iv2_val <- cond_list$iv2_b_interval[i]
+    iv3_val <- cond_list$iv3_b_mean[i]
+
+    vals <- sub$err[sub$iv1_sf4 == iv1_val &
+                    sub$iv2_b_interval == iv2_val &
+                    sub$iv3_b_mean == iv3_val]
+    vals <- vals[!is.na(vals)]
+
+    if (length(vals) < 2) next
+
+    tt <- t.test(vals, mu = 0)
+    ttest_rows[[length(ttest_rows) + 1]] <- data.frame(
+      param          = p,
+      iv1_sf4        = iv1_val,
+      iv2_b_interval = iv2_val,
+      iv3_b_mean     = iv3_val,
+      n              = length(vals),
+      mean_bias      = tt$estimate,
+      t_stat         = tt$statistic,
+      df             = tt$parameter,
+      p_value        = tt$p.value,
+      ci_lower       = tt$conf.int[1],
+      ci_upper       = tt$conf.int[2],
+      stringsAsFactors = FALSE
+    )
+  }
+}
+
+ttest_df <- do.call(rbind, ttest_rows)
+# FDR(Benjamini-Hochberg) 보정
+ttest_df$p_adj_fdr <- p.adjust(ttest_df$p_value, method = "BH")
+ttest_df$sig       <- ifelse(ttest_df$p_adj_fdr < 0.001, "***",
+                      ifelse(ttest_df$p_adj_fdr < 0.01,  "**",
+                      ifelse(ttest_df$p_adj_fdr < 0.05,  "*", "")))
+
+write.csv(ttest_df, "output/analysis/bias_ttest_by_cond.csv", row.names = FALSE)
+lg(sprintf("  저장 완료: output/analysis/bias_ttest_by_cond.csv (%d행)", nrow(ttest_df)))
+
+n_sig <- sum(ttest_df$p_adj_fdr < 0.05, na.rm = TRUE)
+lg(sprintf("  FDR 보정 후 유의한 조건-모수 조합: %d / %d (p_adj < .05)",
+           n_sig, nrow(ttest_df)))
+
+# ── ANOVA 결과 저장 ───────────────────────────────────────────────────────────
+sink("output/analysis/bias_rmse_anova.txt")
+
+cat("================================================================\n")
+cat("ANOVA: Bias (오차 원값) ~ param * IV1 * IV2 * IV3\n")
+cat("종속변수: err = b_est - b_true  (b1~b4)\n")
+cat("================================================================\n\n")
+cat(sprintf("총 관측 수: %d  (b모수 4개 × 수렴 성공 반복)\n\n", nrow(anova_long)))
+cat("── Type I SS ANOVA 표 ──\n\n")
+anova_out_bias <- data.frame(
+  Df      = anova_bias[, "Df"],
+  SS      = round(anova_bias[, "Sum Sq"], 4),
+  MS      = round(anova_bias[, "Mean Sq"], 6),
+  F_value = round(anova_bias[, "F value"], 4),
+  p_value = format.pval(anova_bias[, "Pr(>F)"], digits = 3, eps = 0.001),
+  eta_sq  = round(anova_bias[, "eta_sq"], 4),
+  row.names = rownames(anova_bias)
+)
+print(anova_out_bias)
+
+cat("\n\n================================================================\n")
+cat("ANOVA: RMSE (오차 제곱값) ~ param * IV1 * IV2 * IV3\n")
+cat("종속변수: err^2 = (b_est - b_true)^2  (b1~b4)\n")
+cat("================================================================\n\n")
+anova_out_rmse <- data.frame(
+  Df      = anova_rmse[, "Df"],
+  SS      = round(anova_rmse[, "Sum Sq"], 4),
+  MS      = round(anova_rmse[, "Mean Sq"], 6),
+  F_value = round(anova_rmse[, "F value"], 4),
+  p_value = format.pval(anova_rmse[, "Pr(>F)"], digits = 3, eps = 0.001),
+  eta_sq  = round(anova_rmse[, "eta_sq"], 4),
+  row.names = rownames(anova_rmse)
+)
+print(anova_out_rmse)
+
+cat("\n\n================================================================\n")
+cat("조건별 단일표본 t검정 (mu=0): Bias ≠ 0 여부\n")
+cat("FDR(BH) 보정 적용\n")
+cat("================================================================\n\n")
+cat(sprintf("검정 수: %d  |  FDR 유의(p<.05): %d  |  비율: %.1f%%\n\n",
+            nrow(ttest_df), n_sig, 100 * n_sig / nrow(ttest_df)))
+
+for (p in c("b1","b2","b3","b4")) {
+  sub_t <- ttest_df[ttest_df$param == p, ]
+  cat(sprintf("── %s  (유의 %d / %d 조건) ──\n",
+              p, sum(sub_t$p_adj_fdr < 0.05), nrow(sub_t)))
+  print_cols <- c("iv1_sf4","iv2_b_interval","iv3_b_mean",
+                  "n","mean_bias","t_stat","p_value","p_adj_fdr","sig")
+  print(sub_t[, print_cols], row.names = FALSE, digits = 4)
+  cat("\n")
+}
+
+sink()
+lg("저장 완료: output/analysis/bias_rmse_anova.txt")
+
+lg_section("5-A단계 완료")
+lg(sprintf("  Bias ANOVA η² (주효과): IV1=%.4f  IV2=%.4f  IV3=%.4f  param=%.4f",
+           anova_bias["f_iv1",     "eta_sq"],
+           anova_bias["f_iv2",     "eta_sq"],
+           anova_bias["f_iv3",     "eta_sq"],
+           anova_bias["param",     "eta_sq"]))
+lg(sprintf("  RMSE  ANOVA η² (주효과): IV1=%.4f  IV2=%.4f  IV3=%.4f  param=%.4f",
+           anova_rmse["f_iv1",     "eta_sq"],
+           anova_rmse["f_iv2",     "eta_sq"],
+           anova_rmse["f_iv3",     "eta_sq"],
+           anova_rmse["param",     "eta_sq"]))
 
 # =============================================================================
 # 6단계: 시각화
