@@ -229,10 +229,10 @@ make_iv_factor <- function(x, fmt = "%.2f", decreasing = FALSE) {
 }
 
 IV_CONFIG <- list(
-  iv1 = list(col = "iv1_sf4",        type = "numeric", fmt = "%.4f", decreasing = FALSE),
-  iv2 = list(col = "iv2_b_interval", type = "numeric", fmt = "%.4f", decreasing = TRUE),
-  iv3 = list(col = "iv3_b_mean",     type = "numeric", fmt = "%.2f", decreasing = FALSE),
-  iv4 = list(col = "iv4_theta_dist", type = "numeric", fmt = "%.4f", decreasing = FALSE)
+  iv1 = list(col = "iv1_sf4",        type = "numeric",   fmt = "%.4f", decreasing = FALSE),
+  iv2 = list(col = "iv2_b_interval", type = "numeric",   fmt = "%.4f", decreasing = TRUE),
+  iv3 = list(col = "iv3_b_mean",     type = "numeric",   fmt = "%.2f", decreasing = FALSE),
+  iv4 = list(col = "iv4_theta_dist", type = "character", fmt = "%s",   decreasing = FALSE)
 )
 
 glm_data <- long_df %>%

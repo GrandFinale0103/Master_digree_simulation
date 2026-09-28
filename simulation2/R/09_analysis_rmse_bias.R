@@ -298,7 +298,8 @@ lg("  [조건별 Bias t검정] 진행 중...")
 ttest_rows <- list()
 for (p in c("b1","b2","b3","b4")) {
   sub <- anova_long %>% filter(param == p)
-  cond_list <- unique(sub[, c("iv1_sf4","iv2_b_interval","iv3_b_mean")])
+  # tibble 서브셋을 data.frame으로 명시 변환 (행 접근 안정성)
+  cond_list <- as.data.frame(unique(sub[, c("iv1_sf4","iv2_b_interval","iv3_b_mean")]))
 
   for (i in seq_len(nrow(cond_list))) {
     iv1_val <- cond_list$iv1_sf4[i]
@@ -344,104 +345,94 @@ n_sig <- sum(ttest_df$p_adj_fdr < 0.05, na.rm = TRUE)
 lg(sprintf("  FDR 보정 후 유의한 조건-모수 조합: %d / %d (p_adj < .05)",
            n_sig, nrow(ttest_df)))
 
-# ── ANOVA 결과 저장 ───────────────────────────────────────────────────────────
-sink("output/analysis/bias_rmse_anova.txt")
-
-cat("================================================================\n")
-cat("ANOVA: Bias (오차 원값) ~ param * IV1 * IV2 * IV3\n")
-cat("종속변수: err = b_est - b_true  (b1~b4)\n")
-cat("================================================================\n\n")
-cat(sprintf("총 관측 수: %d  (b모수 4개 × 수렴 성공 반복)\n\n", nrow(anova_long)))
-cat("── Type I SS ANOVA 표 ──\n\n")
-anova_out_bias <- data.frame(
-  Df      = anova_bias[, "Df"],
-  SS      = round(anova_bias[, "Sum Sq"], 4),
-  MS      = round(anova_bias[, "Mean Sq"], 6),
-  F_value = round(anova_bias[, "F value"], 4),
-  p_value = format.pval(anova_bias[, "Pr(>F)"], digits = 3, eps = 0.001),
-  eta_sq  = round(anova_bias[, "eta_sq"], 4),
-  row.names = rownames(anova_bias)
-)
-print(anova_out_bias)
-
-cat("\n\n================================================================\n")
-cat("ANOVA: RMSE (오차 제곱값) ~ param * IV1 * IV2 * IV3\n")
-cat("종속변수: err^2 = (b_est - b_true)^2  (b1~b4)\n")
-cat("================================================================\n\n")
-anova_out_rmse <- data.frame(
-  Df      = anova_rmse[, "Df"],
-  SS      = round(anova_rmse[, "Sum Sq"], 4),
-  MS      = round(anova_rmse[, "Mean Sq"], 6),
-  F_value = round(anova_rmse[, "F value"], 4),
-  p_value = format.pval(anova_rmse[, "Pr(>F)"], digits = 3, eps = 0.001),
-  eta_sq  = round(anova_rmse[, "eta_sq"], 4),
-  row.names = rownames(anova_rmse)
-)
-print(anova_out_rmse)
-
-cat("\n\n================================================================\n")
-cat("조건별 단일표본 t검정 (mu=0): Bias ≠ 0 여부\n")
-cat("FDR(BH) 보정 적용\n")
-cat("================================================================\n\n")
-cat(sprintf("검정 수: %d  |  FDR 유의(p<.05): %d  |  비율: %.1f%%\n\n",
-            nrow(ttest_df), n_sig, 100 * n_sig / nrow(ttest_df)))
-
-for (p in c("b1","b2","b3","b4")) {
-  sub_t <- ttest_df[ttest_df$param == p, ]
-  cat(sprintf("── %s  (유의 %d / %d 조건) ──\n",
-              p, sum(sub_t$p_adj_fdr < 0.05), nrow(sub_t)))
-  print_cols <- c("iv1_sf4","iv2_b_interval","iv3_b_mean",
-                  "n","mean_bias","t_stat","p_value","p_adj_fdr","sig")
-  print(sub_t[, print_cols], row.names = FALSE, digits = 4)
-  cat("\n")
+# ── ANOVA 결과 저장 (sink 비정상 종료 방지) ──────────────────────────────────
+make_anova_df <- function(tbl) {
+  data.frame(
+    Df      = tbl[, "Df"],
+    SS      = round(tbl[, "Sum Sq"], 4),
+    MS      = round(tbl[, "Mean Sq"], 6),
+    F_value = round(tbl[, "F value"], 4),
+    p_value = format.pval(tbl[, "Pr(>F)"], digits = 3, eps = 0.001),
+    eta_sq  = round(tbl[, "eta_sq"], 4),
+    row.names = rownames(tbl)
+  )
 }
 
-sink()
+sink("output/analysis/bias_rmse_anova.txt")
+tryCatch({
+  cat("================================================================\n")
+  cat("ANOVA: Bias (오차 원값) ~ param * IV1 * IV2 * IV3\n")
+  cat("종속변수: err = b_est - b_true  (b1~b4)\n")
+  cat("================================================================\n\n")
+  cat(sprintf("총 관측 수: %d  (b모수 4개 × 수렴 성공 반복)\n\n", nrow(anova_long)))
+  cat("── Type I SS ANOVA 표 ──\n\n")
+  print(make_anova_df(anova_bias))
+
+  cat("\n\n================================================================\n")
+  cat("ANOVA: RMSE (오차 제곱값) ~ param * IV1 * IV2 * IV3\n")
+  cat("종속변수: err^2 = (b_est - b_true)^2  (b1~b4)\n")
+  cat("================================================================\n\n")
+  print(make_anova_df(anova_rmse))
+
+  cat("\n\n================================================================\n")
+  cat("조건별 단일표본 t검정 (mu=0): Bias ≠ 0 여부\n")
+  cat("FDR(BH) 보정 적용\n")
+  cat("================================================================\n\n")
+  cat(sprintf("검정 수: %d  |  FDR 유의(p<.05): %d  |  비율: %.1f%%\n\n",
+              nrow(ttest_df), n_sig, 100 * n_sig / nrow(ttest_df)))
+
+  for (p in c("b1","b2","b3","b4")) {
+    sub_t <- ttest_df[ttest_df$param == p, ]
+    cat(sprintf("── %s  (유의 %d / %d 조건) ──\n",
+                p, sum(sub_t$p_adj_fdr < 0.05), nrow(sub_t)))
+    print_cols <- c("iv1_sf4","iv2_b_interval","iv3_b_mean",
+                    "n","mean_bias","t_stat","p_value","p_adj_fdr","sig")
+    print(sub_t[, print_cols], row.names = FALSE, digits = 4)
+    cat("\n")
+  }
+}, error = function(e) {
+  cat("\n[오류] ANOVA 결과 저장 중 에러:", conditionMessage(e), "\n")
+}, finally = {
+  sink()
+})
 lg("저장 완료: output/analysis/bias_rmse_anova.txt")
+
+# ── 로그 요약: 안전한 rowname 접근 ───────────────────────────────────────────
+safe_eta <- function(tbl, row_nm) {
+  if (row_nm %in% rownames(tbl)) round(tbl[row_nm, "eta_sq"], 4) else NA_real_
+}
 
 lg_section("5-A단계 완료")
 lg(sprintf("  Bias ANOVA η² (주효과): IV1=%.4f  IV2=%.4f  IV3=%.4f  param=%.4f",
-           anova_bias["f_iv1",     "eta_sq"],
-           anova_bias["f_iv2",     "eta_sq"],
-           anova_bias["f_iv3",     "eta_sq"],
-           anova_bias["param",     "eta_sq"]))
+           safe_eta(anova_bias, "f_iv1"),
+           safe_eta(anova_bias, "f_iv2"),
+           safe_eta(anova_bias, "f_iv3"),
+           safe_eta(anova_bias, "param")))
 lg(sprintf("  RMSE  ANOVA η² (주효과): IV1=%.4f  IV2=%.4f  IV3=%.4f  param=%.4f",
-           anova_rmse["f_iv1",     "eta_sq"],
-           anova_rmse["f_iv2",     "eta_sq"],
-           anova_rmse["f_iv3",     "eta_sq"],
-           anova_rmse["param",     "eta_sq"]))
+           safe_eta(anova_rmse, "f_iv1"),
+           safe_eta(anova_rmse, "f_iv2"),
+           safe_eta(anova_rmse, "f_iv3"),
+           safe_eta(anova_rmse, "param")))
 
 # =============================================================================
 # 6단계: 시각화
 # =============================================================================
-make_iv_factor <- function(x, fmt = "%.4f", decreasing = FALSE) {
+# factor 헬퍼 (시각화 전용, 한 번만 정의)
+make_plot_factor <- function(x, fmt = "%.4f", decreasing = FALSE) {
   vals <- sort(unique(na.omit(x)), decreasing = decreasing)
   factor(sprintf(fmt, x), levels = sprintf(fmt, vals))
 }
-
-summary_df <- summary_df %>%
-  mutate(
-    iv1 = make_iv_factor(iv1_sf4,        fmt = "%.4f", decreasing = FALSE),
-    iv2 = make_iv_factor(iv2_b_interval, fmt = "%.4f", decreasing = TRUE),
-    iv3 = make_iv_factor(iv3_b_mean,     fmt = "%.2f", decreasing = FALSE)
-  )
 
 b_params <- c("b1", "b2", "b3", "b4")
 b_labels <- c(b1 = "b₁", b2 = "b₂", b3 = "b₃", b4 = "b₄")
-
-# factor 헬퍼
-make_iv_factor2 <- function(x, fmt = "%.4f", decreasing = FALSE) {
-  vals <- sort(unique(na.omit(x)), decreasing = decreasing)
-  factor(sprintf(fmt, x), levels = sprintf(fmt, vals))
-}
 
 plot_b <- summary_df %>%
   filter(param %in% b_params) %>%
   mutate(
     param = factor(param, levels = b_params, labels = b_labels),
-    iv1   = make_iv_factor2(iv1_sf4,        "%.4f", decreasing = FALSE),
-    iv2   = make_iv_factor2(iv2_b_interval, "%.4f", decreasing = TRUE),
-    iv3   = make_iv_factor2(iv3_b_mean,     "%.2f", decreasing = FALSE)
+    iv1   = make_plot_factor(iv1_sf4,        "%.4f", decreasing = FALSE),
+    iv2   = make_plot_factor(iv2_b_interval, "%.4f", decreasing = TRUE),
+    iv3   = make_plot_factor(iv3_b_mean,     "%.2f", decreasing = FALSE)
   )
 
 # 공통 facet 레이어 (param 4행 × iv2*iv1 70열)
@@ -492,9 +483,9 @@ lg("저장 완료: output/analysis/rmse_bias_plot_b_rmse.png")
 plot_a <- summary_df %>%
   filter(param == "a") %>%
   mutate(
-    iv1 = make_iv_factor2(iv1_sf4,        "%.4f", decreasing = FALSE),
-    iv2 = make_iv_factor2(iv2_b_interval, "%.4f", decreasing = TRUE),
-    iv3 = make_iv_factor2(iv3_b_mean,     "%.2f", decreasing = FALSE)
+    iv1 = make_plot_factor(iv1_sf4,        "%.4f", decreasing = FALSE),
+    iv2 = make_plot_factor(iv2_b_interval, "%.4f", decreasing = TRUE),
+    iv3 = make_plot_factor(iv3_b_mean,     "%.2f", decreasing = FALSE)
   )
 
 p_a <- ggplot(plot_a, aes(x = iv3, group = 1)) +
