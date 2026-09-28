@@ -362,27 +362,46 @@ lg("저장 완료: output/analysis/transposition_glm.txt")
 # =============================================================================
 # 7단계: 시각화
 # =============================================================================
-p <- ggplot(summary_df,
-            aes(x    = factor(iv3_b_mean),
-                y    = prop_transposed,
-                fill = factor(iv1_sf4))) +
-  geom_col(position = "dodge") +
+# factor 헬퍼
+make_num_factor <- function(x, fmt, decreasing = FALSE) {
+  vals <- sort(unique(na.omit(x)), decreasing = decreasing)
+  factor(sprintf(fmt, x), levels = sprintf(fmt, vals))
+}
+
+plot_df <- summary_df %>%
+  mutate(
+    iv1 = make_num_factor(iv1_sf4,        "%.4f", decreasing = FALSE),
+    iv2 = make_num_factor(iv2_b_interval, "%.4f", decreasing = FALSE),
+    iv3 = make_num_factor(iv3_b_mean,     "%.2f", decreasing = FALSE)
+  )
+
+# IV1(행) × IV2(열) 패널: 7 × 10 = 70 패널
+p <- ggplot(plot_df, aes(x = iv3, y = prop_transposed)) +
+  geom_col(fill = "steelblue") +
   facet_grid(
-    rows = vars(iv1_sf4),
-    cols = vars(iv2_b_interval),
+    rows     = vars(iv1),
+    cols     = vars(iv2),
     labeller = labeller(
-      iv1_sf4        = function(x) paste0("s4 = ", x),
-      iv2_b_interval = function(x) paste0("Interval = ", x)
+      iv1 = function(x) paste0("s4=", x),
+      iv2 = function(x) paste0("Int=", x)
     )
   ) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     limits = c(0, 1)) +
-  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate", fill = "s4 (IV1)") +
-  theme_bw(base_size = 11) +
-  theme(legend.position = "bottom")
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    limits = c(0, 1)
+  ) +
+  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate") +
+  theme_bw(base_size = 9) +
+  theme(
+    strip.text  = element_text(size = 7),
+    axis.text   = element_text(size = 7),
+    axis.title  = element_text(size = 9),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
+# 70 패널(7행×10열): width=24, height=18
 ggsave("output/analysis/transposition_plot.png", p,
-       width = 12, height = 14, dpi = 150)
+       width = 24, height = 18, dpi = 150)
 lg("저장 완료: output/analysis/transposition_plot.png")
 
 # ── 최종 요약 ─────────────────────────────────────────────────────────────────

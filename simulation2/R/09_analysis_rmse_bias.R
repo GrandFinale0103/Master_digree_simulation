@@ -244,65 +244,83 @@ summary_df <- summary_df %>%
 b_params <- c("b1", "b2", "b3", "b4")
 b_labels <- c(b1 = "b₁", b2 = "b₂", b3 = "b₃", b4 = "b₄")
 
+# factor 헬퍼
+make_iv_factor2 <- function(x, fmt = "%.4f", decreasing = FALSE) {
+  vals <- sort(unique(na.omit(x)), decreasing = decreasing)
+  factor(sprintf(fmt, x), levels = sprintf(fmt, vals))
+}
+
 plot_b <- summary_df %>%
   filter(param %in% b_params) %>%
-  mutate(param = factor(param, levels = b_params, labels = b_labels))
+  mutate(
+    param = factor(param, levels = b_params, labels = b_labels),
+    iv1   = make_iv_factor2(iv1_sf4,        "%.4f", decreasing = FALSE),
+    iv2   = make_iv_factor2(iv2_b_interval, "%.4f", decreasing = TRUE),
+    iv3   = make_iv_factor2(iv3_b_mean,     "%.2f", decreasing = FALSE)
+  )
 
-# Bias
+# 공통 facet 레이어 (param 4행 × iv2*iv1 70열)
+common_facet <- list(
+  facet_grid(
+    rows     = vars(param),
+    cols     = vars(iv2, iv1),
+    labeller = labeller(
+      iv2   = function(x) paste0("Int=", x),
+      iv1   = function(x) paste0("s4=", x),
+      param = label_value
+    )
+  ),
+  labs(x = "b-parameter Mean (IV3)"),
+  theme_bw(base_size = 8),
+  theme(
+    strip.text  = element_text(size = 6),
+    axis.text   = element_text(size = 6),
+    axis.title  = element_text(size = 8),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+)
+
+# Bias — 4행 × 70열: width=42, height=12
 p_bias_b <- ggplot(plot_b, aes(x = iv3, y = bias, group = 1)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
-  geom_line(linewidth = 0.7, colour = "steelblue") +
-  geom_point(size = 1.8, colour = "steelblue") +
-  facet_grid(
-    rows = vars(param),
-    cols = vars(iv2, iv1),
-    labeller = labeller(
-      iv2   = function(x) paste0("Int=", x),
-      iv1   = function(x) paste0("s4=", x),
-      param = label_value
-    )
-  ) +
-  labs(x = "b-parameter Mean (IV3)", y = "Bias") +
-  theme_bw(base_size = 9) +
-  theme(strip.text = element_text(size = 7))
+  geom_line(linewidth = 0.6, colour = "steelblue") +
+  geom_point(size = 1.2, colour = "steelblue") +
+  labs(y = "Bias") +
+  common_facet
 
 ggsave("output/analysis/rmse_bias_plot_b_bias.png", p_bias_b,
-       width = 24, height = 10, dpi = 150)
+       width = 42, height = 12, dpi = 150)
 lg("저장 완료: output/analysis/rmse_bias_plot_b_bias.png")
 
-# RMSE
+# RMSE — 4행 × 70열: width=42, height=12
 p_rmse_b <- ggplot(plot_b, aes(x = iv3, y = rmse, group = 1)) +
-  geom_line(linewidth = 0.7, colour = "firebrick") +
-  geom_point(size = 1.8, colour = "firebrick") +
-  facet_grid(
-    rows = vars(param),
-    cols = vars(iv2, iv1),
-    labeller = labeller(
-      iv2   = function(x) paste0("Int=", x),
-      iv1   = function(x) paste0("s4=", x),
-      param = label_value
-    )
-  ) +
-  labs(x = "b-parameter Mean (IV3)", y = "RMSE") +
-  theme_bw(base_size = 9) +
-  theme(strip.text = element_text(size = 7))
+  geom_line(linewidth = 0.6, colour = "firebrick") +
+  geom_point(size = 1.2, colour = "firebrick") +
+  labs(y = "RMSE") +
+  common_facet
 
 ggsave("output/analysis/rmse_bias_plot_b_rmse.png", p_rmse_b,
-       width = 24, height = 10, dpi = 150)
+       width = 42, height = 12, dpi = 150)
 lg("저장 완료: output/analysis/rmse_bias_plot_b_rmse.png")
 
-# a 모수
-plot_a <- summary_df %>% filter(param == "a")
+# a 모수 — iv2(10행) × iv1(7열): width=16, height=18
+plot_a <- summary_df %>%
+  filter(param == "a") %>%
+  mutate(
+    iv1 = make_iv_factor2(iv1_sf4,        "%.4f", decreasing = FALSE),
+    iv2 = make_iv_factor2(iv2_b_interval, "%.4f", decreasing = TRUE),
+    iv3 = make_iv_factor2(iv3_b_mean,     "%.2f", decreasing = FALSE)
+  )
 
 p_a <- ggplot(plot_a, aes(x = iv3, group = 1)) +
   geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
-  geom_line(aes(y = bias),  linewidth = 0.7, colour = "steelblue") +
-  geom_point(aes(y = bias), size = 1.8, colour = "steelblue", shape = 16) +
-  geom_line(aes(y = rmse),  linewidth = 0.7, colour = "firebrick", linetype = "dotted") +
-  geom_point(aes(y = rmse), size = 1.8, colour = "firebrick", shape = 17) +
+  geom_line(aes(y = bias),  linewidth = 0.6, colour = "steelblue") +
+  geom_point(aes(y = bias), size = 1.5, colour = "steelblue", shape = 16) +
+  geom_line(aes(y = rmse),  linewidth = 0.6, colour = "firebrick", linetype = "dotted") +
+  geom_point(aes(y = rmse), size = 1.5, colour = "firebrick", shape = 17) +
   facet_grid(
-    rows = vars(iv2),
-    cols = vars(iv1),
+    rows     = vars(iv2),
+    cols     = vars(iv1),
     labeller = labeller(
       iv1 = function(x) paste0("s4=", x),
       iv2 = function(x) paste0("Int=", x)
@@ -311,10 +329,13 @@ p_a <- ggplot(plot_a, aes(x = iv3, group = 1)) +
   labs(x = "b-parameter Mean (IV3)", y = "Value",
        caption = "Solid blue = Bias   Dotted red = RMSE") +
   theme_bw(base_size = 9) +
-  theme(strip.text = element_text(size = 8))
+  theme(
+    strip.text  = element_text(size = 7),
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
 
 ggsave("output/analysis/rmse_bias_plot_a.png", p_a,
-       width = 14, height = 10, dpi = 150)
+       width = 16, height = 18, dpi = 150)
 lg("저장 완료: output/analysis/rmse_bias_plot_a.png")
 
 # ── 최종 요약 ─────────────────────────────────────────────────────────────────

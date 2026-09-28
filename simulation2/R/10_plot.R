@@ -48,6 +48,7 @@ if (!file.exists(trans_path)) {
     )
 
   # IV4는 정규분포만 → fill 불필요 (단일 색상 막대)
+  # IV1(7행) × IV2(10열) = 70 패널 → width=24, height=18
   p_trans <- ggplot(df_t,
                     aes(x = iv3, y = prop_transposed)) +
     geom_col(fill = "steelblue") +
@@ -55,8 +56,8 @@ if (!file.exists(trans_path)) {
       rows     = vars(iv1),
       cols     = vars(iv2),
       labeller = labeller(
-        iv1 = function(x) paste0("s4 = ", x),
-        iv2 = function(x) paste0("Interval = ", x)
+        iv1 = function(x) paste0("s4=", x),
+        iv2 = function(x) paste0("Int=", x)
       )
     ) +
     scale_y_continuous(
@@ -67,15 +68,16 @@ if (!file.exists(trans_path)) {
       x = "b-parameter Mean (IV3)",
       y = "Reversal Rate"
     ) +
-    theme_bw(base_size = 10) +
+    theme_bw(base_size = 9) +
     theme(
-      strip.text  = element_text(size = 8),
-      axis.text   = element_text(size = 8),
-      axis.title  = element_text(size = 10)
+      strip.text  = element_text(size = 7),
+      axis.text   = element_text(size = 7),
+      axis.title  = element_text(size = 9),
+      axis.text.x = element_text(angle = 45, hjust = 1)
     )
 
   ggsave("output/analysis/transposition_plot.png", p_trans,
-         width = 20, height = 14, dpi = 150)
+         width = 24, height = 18, dpi = 150)
   message("저장 완료: output/analysis/transposition_plot.png")
 }
 
@@ -102,6 +104,7 @@ if (!file.exists(rmse_path)) {
       iv3   = make_num_factor(iv3_b_mean,     "%.2f", decreasing = FALSE)
     )
 
+  # param(4행) × iv2*iv1(70열) → width=42, height=12
   common_layers <- list(
     facet_grid(
       rows     = vars(param),
@@ -113,11 +116,12 @@ if (!file.exists(rmse_path)) {
       )
     ),
     labs(x = "b-parameter Mean (IV3)"),
-    theme_bw(base_size = 9),
+    theme_bw(base_size = 8),
     theme(
       strip.text  = element_text(size = 6),
-      axis.text   = element_text(size = 7),
-      axis.title  = element_text(size = 9)
+      axis.text   = element_text(size = 6),
+      axis.title  = element_text(size = 8),
+      axis.text.x = element_text(angle = 45, hjust = 1)
     )
   )
 
@@ -125,24 +129,24 @@ if (!file.exists(rmse_path)) {
   p_bias <- ggplot(plot_b, aes(x = iv3, y = bias, group = 1)) +
     geom_hline(yintercept = 0,
                linetype = "dashed", colour = "grey50", linewidth = 0.4) +
-    geom_line(linewidth = 0.7, colour = "steelblue") +
-    geom_point(size = 1.5, colour = "steelblue") +
+    geom_line(linewidth = 0.6, colour = "steelblue") +
+    geom_point(size = 1.2, colour = "steelblue") +
     labs(y = "Bias") +
     common_layers
 
   ggsave("output/analysis/rmse_bias_plot_b_bias.png", p_bias,
-         width = 28, height = 10, dpi = 150)
+         width = 42, height = 12, dpi = 150)
   message("저장 완료: output/analysis/rmse_bias_plot_b_bias.png")
 
   # RMSE
   p_rmse <- ggplot(plot_b, aes(x = iv3, y = rmse, group = 1)) +
-    geom_line(linewidth = 0.7, colour = "firebrick") +
-    geom_point(size = 1.5, colour = "firebrick") +
+    geom_line(linewidth = 0.6, colour = "firebrick") +
+    geom_point(size = 1.2, colour = "firebrick") +
     labs(y = "RMSE") +
     common_layers
 
   ggsave("output/analysis/rmse_bias_plot_b_rmse.png", p_rmse,
-         width = 28, height = 10, dpi = 150)
+         width = 42, height = 12, dpi = 150)
   message("저장 완료: output/analysis/rmse_bias_plot_b_rmse.png")
 }
 
