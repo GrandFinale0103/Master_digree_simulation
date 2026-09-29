@@ -23,6 +23,7 @@ suppressPackageStartupMessages({
   library(tidyr)
   library(stringr)
   library(ggplot2)
+  library(car)       # Type III ANOVA
 })
 
 dir.create("output/analysis", recursive = TRUE, showWarnings = FALSE)
@@ -256,41 +257,51 @@ anova_long <- long_df %>%
 
 lg(sprintf("  ANOVA 데이터: %d행 (b1~b4 × 수렴 성공 반복)", nrow(anova_long)))
 
-# ── Bias ANOVA ────────────────────────────────────────────────────────────────
+# car 패키지 설치 확인
+if (!requireNamespace("car", quietly = TRUE))
+  install.packages("car", repos = "https://cran.rstudio.com/")
+
+# Type III SS는 직교 코딩(contr.sum) 필요
+contr_list <- list(param = contr.sum, f_iv1 = contr.sum,
+                   f_iv2 = contr.sum, f_iv3 = contr.sum)
+
+# ── Bias ANOVA (Type III) ─────────────────────────────────────────────────────
 # 종속변수: err (오차 원값) → 조건별 평균이 Bias
-# 모형: err ~ param * f_iv1 * f_iv2 * f_iv3
-# → param(b1~b4)도 요인으로 포함하여 모수 × 조건 상호작용 확인
-lg("  [Bias ANOVA] 모형 적합 중...")
-fit_bias <- withCallingHandlers(
-  aov(err ~ param * f_iv1 * f_iv2 * f_iv3, data = anova_long),
+lg("  [Bias ANOVA Type III] 모형 적합 중...")
+fit_bias_lm <- withCallingHandlers(
+  lm(err ~ param * f_iv1 * f_iv2 * f_iv3,
+     data = anova_long, contrasts = contr_list),
   warning = function(w) {
     lg(sprintf("  [경고] %s", conditionMessage(w)))
     invokeRestart("muffleWarning")
   }
 )
-anova_bias <- summary(fit_bias)[[1]]
+anova_bias <- as.data.frame(car::Anova(fit_bias_lm, type = 3))
+# car::Anova 열: Sum Sq, Df, F value, Pr(>F) — Mean Sq 직접 계산
+anova_bias[["Mean Sq"]] <- anova_bias[["Sum Sq"]] / anova_bias[["Df"]]
+# Intercept 행 제외하고 eta_sq 계산 (실질 효과 크기용)
+ss_total_bias <- sum(anova_bias[rownames(anova_bias) != "(Intercept)", "Sum Sq"],
+                     na.rm = TRUE)
+anova_bias$eta_sq <- anova_bias[["Sum Sq"]] / ss_total_bias
+lg("  [Bias ANOVA Type III] 완료")
 
-# eta-squared (효과 크기)
-ss_total_bias <- sum(anova_bias[, "Sum Sq"])
-anova_bias$eta_sq <- anova_bias[, "Sum Sq"] / ss_total_bias
-
-lg("  [Bias ANOVA] 완료")
-
-# ── RMSE ANOVA ────────────────────────────────────────────────────────────────
+# ── RMSE ANOVA (Type III) ─────────────────────────────────────────────────────
 # 종속변수: err^2 (제곱 오차) → 조건별 평균의 제곱근이 RMSE
-lg("  [RMSE ANOVA] 모형 적합 중...")
-fit_rmse <- withCallingHandlers(
-  aov(err2 ~ param * f_iv1 * f_iv2 * f_iv3, data = anova_long),
+lg("  [RMSE ANOVA Type III] 모형 적합 중...")
+fit_rmse_lm <- withCallingHandlers(
+  lm(err2 ~ param * f_iv1 * f_iv2 * f_iv3,
+     data = anova_long, contrasts = contr_list),
   warning = function(w) {
     lg(sprintf("  [경고] %s", conditionMessage(w)))
     invokeRestart("muffleWarning")
   }
 )
-anova_rmse <- summary(fit_rmse)[[1]]
-ss_total_rmse <- sum(anova_rmse[, "Sum Sq"])
-anova_rmse$eta_sq <- anova_rmse[, "Sum Sq"] / ss_total_rmse
-
-lg("  [RMSE ANOVA] 완료")
+anova_rmse <- as.data.frame(car::Anova(fit_rmse_lm, type = 3))
+anova_rmse[["Mean Sq"]] <- anova_rmse[["Sum Sq"]] / anova_rmse[["Df"]]
+ss_total_rmse <- sum(anova_rmse[rownames(anova_rmse) != "(Intercept)", "Sum Sq"],
+                     na.rm = TRUE)
+anova_rmse$eta_sq <- anova_rmse[["Sum Sq"]] / ss_total_rmse
+lg("  [RMSE ANOVA Type III] 완료")
 
 # ── 조건별 Bias t검정 (단일표본, mu=0) + FDR 보정 ────────────────────────────
 lg("  [조건별 Bias t검정] 진행 중...")
@@ -347,6 +358,7 @@ lg(sprintf("  FDR 보정 후 유의한 조건-모수 조합: %d / %d (p_adj < .0
 
 # ── ANOVA 결과 저장 (sink 비정상 종료 방지) ──────────────────────────────────
 make_anova_df <- function(tbl) {
+  # car::Anova 출력 컬럼: Sum Sq, Df, F value, Pr(>F), Mean Sq(직접 계산), eta_sq
   data.frame(
     Df      = tbl[, "Df"],
     SS      = round(tbl[, "Sum Sq"], 4),
@@ -363,6 +375,7 @@ tryCatch({
   cat("================================================================\n")
   cat("ANOVA: Bias (오차 원값) ~ param * IV1 * IV2 * IV3\n")
   cat("종속변수: err = b_est - b_true  (b1~b4)\n")
+  cat("Type III SS (car::Anova) — contr.sum 코딩\n")
   cat("================================================================\n\n")
   cat(sprintf("총 관측 수: %d  (b모수 4개 × 수렴 성공 반복)\n\n", nrow(anova_long)))
   cat("── Type I SS ANOVA 표 ──\n\n")
@@ -371,6 +384,7 @@ tryCatch({
   cat("\n\n================================================================\n")
   cat("ANOVA: RMSE (오차 제곱값) ~ param * IV1 * IV2 * IV3\n")
   cat("종속변수: err^2 = (b_est - b_true)^2  (b1~b4)\n")
+  cat("Type III SS (car::Anova) — contr.sum 코딩\n")
   cat("================================================================\n\n")
   print(make_anova_df(anova_rmse))
 
