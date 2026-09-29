@@ -20,6 +20,8 @@
 #   output/analysis/rmse_bias_summary.csv    — 조건 × 모수별 Bias / RMSE 집계
 #   output/analysis/rmse_bias_plot_b.png     — b1-b4 Bias / RMSE 시각화
 #   output/analysis/rmse_bias_plot_a.png     — a 모수 Bias / RMSE 시각화
+#   output/analysis/bias_rmse_anova.txt      — b3/b4 Bias·RMSE Type III ANOVA (4개 표)
+#   output/analysis/bias_ttest_by_cond.csv   — 조건별 Bias t검정 (FDR 보정)
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -380,6 +382,113 @@ ggsave("output/analysis/rmse_bias_plot_a.png", p_a,
 lg("저장 완료: output/analysis/rmse_bias_plot_a.png")
 
 # =============================================================================
+# 9단계: ANOVA — b3 / b4 Bias·RMSE 조건 간 차이 검정 (Type III)
+#   독립변수: IV1 * IV2 * IV3 * IV4
+#   ANOVA 표 4개: b3 Bias / b3 RMSE / b4 Bias / b4 RMSE
+#   Bias: 종속변수 = err,  RMSE: 종속변수 = err^2
+# =============================================================================
+lg_section("9단계: ANOVA (b3/b4 Bias & RMSE, Type III)")
+
+if (!requireNamespace("car", quietly = TRUE))
+  install.packages("car", repos = "https://cran.rstudio.com/")
+
+contr_list <- list(f_iv1 = contr.sum, f_iv2 = contr.sum,
+                   f_iv3 = contr.sum, f_iv4 = contr.sum)
+
+anova_data <- long_df %>%
+  mutate(
+    f_iv1 = factor(iv1_sf4),
+    f_iv2 = factor(iv2_b_interval),
+    f_iv3 = factor(iv3_b_mean),
+    f_iv4 = factor(iv4_theta_dist,
+                   levels = c("normal", "pos_skew", "neg_skew", "uniform"))
+  )
+
+fit_type3_anova <- function(dv, label) {
+  lg(sprintf("  [%s] 모형 적합 중...", label))
+  df <- anova_data %>% mutate(.dv = dv) %>% filter(!is.na(.dv))
+  fit <- withCallingHandlers(
+    lm(.dv ~ f_iv1 * f_iv2 * f_iv3 * f_iv4, data = df, contrasts = contr_list),
+    warning = function(w) {
+      lg(sprintf("    [경고] %s", conditionMessage(w)))
+      invokeRestart("muffleWarning")
+    }
+  )
+  tbl <- as.data.frame(car::Anova(fit, type = 3))
+  tbl[["Mean Sq"]] <- tbl[["Sum Sq"]] / tbl[["Df"]]
+  ss_tot <- sum(tbl[rownames(tbl) != "(Intercept)", "Sum Sq"], na.rm = TRUE)
+  tbl$eta_sq <- tbl[["Sum Sq"]] / ss_tot
+  lg(sprintf("  [%s] 완료 (n=%d)", label, nrow(df)))
+  list(tbl = tbl, n = nrow(df))
+}
+
+anova_b3_bias <- fit_type3_anova(anova_data$err_b3,   "b3 Bias")
+anova_b3_rmse <- fit_type3_anova(anova_data$err_b3^2, "b3 RMSE")
+anova_b4_bias <- fit_type3_anova(anova_data$err_b4,   "b4 Bias")
+anova_b4_rmse <- fit_type3_anova(anova_data$err_b4^2, "b4 RMSE")
+
+# ── 조건별 Bias t검정 (b3, b4, mu=0) + FDR 보정 ──────────────────────────────
+ttest_df <- bind_rows(lapply(c("b3", "b4"), function(p) {
+  long_df %>%
+    select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, iv4_theta_dist,
+           err = all_of(paste0("err_", p))) %>%
+    filter(!is.na(err)) %>%
+    group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, iv4_theta_dist) %>%
+    filter(n() >= 2) %>%
+    summarise(
+      n         = n(),
+      mean_bias = mean(err),
+      t_stat    = unname(t.test(err, mu = 0)$statistic),
+      p_value   = t.test(err, mu = 0)$p.value,
+      .groups   = "drop"
+    ) %>%
+    mutate(param = p, .before = 1)
+}))
+ttest_df$p_adj_fdr <- p.adjust(ttest_df$p_value, method = "BH")
+ttest_df$sig <- ifelse(ttest_df$p_adj_fdr < 0.001, "***",
+                ifelse(ttest_df$p_adj_fdr < 0.01,  "**",
+                ifelse(ttest_df$p_adj_fdr < 0.05,  "*", "")))
+write.csv(ttest_df, "output/analysis/bias_ttest_by_cond.csv", row.names = FALSE)
+lg(sprintf("저장 완료: output/analysis/bias_ttest_by_cond.csv (%d행)", nrow(ttest_df)))
+
+# ── ANOVA 결과 저장 ──────────────────────────────────────────────────────────
+make_anova_df <- function(tbl) {
+  data.frame(
+    Df      = tbl[, "Df"],
+    SS      = round(tbl[, "Sum Sq"], 4),
+    MS      = round(tbl[, "Mean Sq"], 6),
+    F_value = round(tbl[, "F value"], 4),
+    p_value = format.pval(tbl[, "Pr(>F)"], digits = 3, eps = 0.001),
+    eta_sq  = round(tbl[, "eta_sq"], 4),
+    row.names = rownames(tbl)
+  )
+}
+print_anova_block <- function(res, title, dv_desc) {
+  cat(strrep("=", 64), "\n")
+  cat(sprintf("ANOVA [%s]\n종속변수: %s\n", title, dv_desc))
+  cat("독립변수: IV1 * IV2 * IV3 * IV4  |  Type III SS (car::Anova, contr.sum)\n")
+  cat(strrep("=", 64), "\n\n")
+  cat(sprintf("수렴 성공 반복 수: %d\n\n", res$n))
+  print(make_anova_df(res$tbl))
+  cat("\n")
+}
+
+sink("output/analysis/bias_rmse_anova.txt")
+tryCatch({
+  print_anova_block(anova_b3_bias, "b3 — Bias", "err_b3 = b3_est - b3_true (범주3-4 경계)")
+  print_anova_block(anova_b3_rmse, "b3 — RMSE", "err_b3^2")
+  print_anova_block(anova_b4_bias, "b4 — Bias", "err_b4 = b4_est - b4_true (범주4-5 경계)")
+  print_anova_block(anova_b4_rmse, "b4 — RMSE", "err_b4^2")
+  cat(strrep("=", 64), "\n")
+  cat("조건별 단일표본 t검정 (mu=0) | FDR(BH) 보정\n")
+  cat(strrep("=", 64), "\n\n")
+  print(as.data.frame(ttest_df), row.names = FALSE, digits = 4)
+}, error = function(e) {
+  cat("\n[오류] 결과 저장 중 에러:", conditionMessage(e), "\n")
+}, finally = sink())
+lg("저장 완료: output/analysis/bias_rmse_anova.txt")
+
+# =============================================================================
 # 최종 요약
 # =============================================================================
 lg_section("최종 요약")
@@ -403,5 +512,7 @@ lg("  output/analysis/rmse_bias_summary.csv")
 lg("  output/analysis/rmse_bias_plot_b_bias.png")
 lg("  output/analysis/rmse_bias_plot_b_rmse.png")
 lg("  output/analysis/rmse_bias_plot_a.png")
+lg("  output/analysis/bias_rmse_anova.txt")
+lg("  output/analysis/bias_ttest_by_cond.csv")
 
 flush_log()
