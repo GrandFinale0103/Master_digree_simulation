@@ -114,13 +114,24 @@ fit_nrm_one <- function(resp_path, out_dir, z_crit) {
     row$sf_transposed_any <- any(ak_rev)
 
     # 델타 방법: SE(b4 − b3)
-    V <- tryCatch(stats::vcov(mod), error = function(e) NULL)
+    # 공분산 행렬: mirt 추출 함수 사용 (stats::vcov는 mirt S4 메서드로 연결되지 않음)
+    # error 메시지는 Windows 인코딩 깨짐 방지를 위해 영어로 기록
+    se_msg <- ""
+    V <- tryCatch(mirt::extract.mirt(mod, "vcov"), error = function(e) {
+      se_msg <<- paste("vcov extract failed:", conditionMessage(e)); NULL
+    })
     free_nm <- it1$name[it1$est]
     free_pn <- it1$parnum[it1$est]
     if (!is.null(V)) {
-      v_pn <- as.integer(sub(".*\\.", "", rownames(V)))
-      idx  <- match(free_pn, v_pn)
-      if (!anyNA(idx)) {
+      rn   <- rownames(V)
+      idx  <- match(paste0(free_nm, ".", free_pn), rn)        # 예: "a1.1"
+      if (anyNA(idx)) {
+        idx <- match(free_pn, suppressWarnings(as.integer(sub(".*\\.", "", rn))))
+      }
+      if (anyNA(idx)) {
+        se_msg <- paste0("vcov names not matched; first names: ",
+                         paste(head(rn, 6), collapse = " "))
+      } else {
         Vf <- V[idx, idx, drop = FALSE]
         g  <- function(pp) { bb <- nrm_boundaries(pp); bb[4] - bb[3] }
         grad <- vapply(free_nm, function(nm) {
@@ -136,10 +147,15 @@ fit_nrm_one <- function(resp_path, out_dir, z_crit) {
           row$z         <- row$diff_b4_b3 / row$se_diff
           row$p_value   <- 2 * pnorm(abs(row$z), lower.tail = FALSE)
           row$reject_h0 <- abs(row$z) > z_crit
+        } else {
+          se_msg <- sprintf("invalid variance of b4-b3: %s (vcov has NA: %s)",
+                            format(var_d), anyNA(Vf))
         }
       }
+    } else if (se_msg == "") {
+      se_msg <- "vcov is NULL (information matrix not computed)"
     }
-    if (!row$se_ok) row$error <- "SE 계산 불가 (정보행렬 역행렬 실패 등)"
+    if (!row$se_ok) row$error <- se_msg
     row
   }, error = function(e) {
     row$error <- conditionMessage(e)
