@@ -24,10 +24,17 @@
 #   n/prop_sf_rev_34     — 채점함수 전치 (ak3 ≤ ak2 또는 ak4 ≤ ak3: b3·b4 관련) [분모: 수렴]
 #   n/prop_sf_transposed_any — ak0~ak4 중 하나라도 전치                  [분모: 수렴]
 #
+# 전치 분석 (b3 ≥ b4, 수렴한 반복):
+#   nrm_transposition_plot.png — 조건별 전치 비율 그래프
+#   nrm_transposition_glm.txt  — 전치 여부 로지스틱 GLM (IV1*IV2*IV3, LRT)
+#
 # 출력 폴더: output/nrm/analysis/
 # =============================================================================
 
-suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(ggplot2)
+})
 
 NRM_DIR <- "output/nrm/estimated_params"
 OUT_DIR <- "output/nrm/analysis"
@@ -136,3 +143,82 @@ tryCatch({
   print(as.data.frame(t(overall)), digits = 4)
 }, finally = sink())
 message(sprintf("저장 완료: %s/nrm_test_overall.txt", OUT_DIR))
+
+# =============================================================================
+# 전치 비율 그래프 (b3 ≥ b4)
+# =============================================================================
+make_iv_factor <- function(x, fmt, decreasing = FALSE) {
+  vals <- sort(unique(na.omit(x)), decreasing = decreasing)
+  factor(sprintf(fmt, x), levels = sprintf(fmt, vals))
+}
+add_factors <- function(df) {
+  df %>% mutate(
+    f_iv1 = make_iv_factor(iv1_sf4,        "%.2f"),
+    f_iv2 = make_iv_factor(iv2_b_interval, "%.2f", decreasing = TRUE),
+    f_iv3 = make_iv_factor(iv3_b_mean,     "%.1f")
+  )
+}
+
+# IV1(7행) × IV2(10열) 패널, 패널 안 x축 = IV3
+p_trans <- ggplot(add_factors(cond_df), aes(x = f_iv3, y = prop_transposed_34)) +
+  geom_col(fill = "steelblue") +
+  facet_grid(rows = vars(f_iv1), cols = vars(f_iv2),
+             labeller = labeller(f_iv1 = function(x) paste0("s4=", x),
+                                 f_iv2 = function(x) paste0("Int=", x))) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
+  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate (NRM, b3 \u2265 b4)") +
+  theme_bw(base_size = 9) +
+  theme(strip.text = element_text(size = 7), axis.text = element_text(size = 7),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(file.path(OUT_DIR, "nrm_transposition_plot.png"), p_trans,
+       width = 24, height = 18, dpi = 150)
+message(sprintf("저장 완료: %s/nrm_transposition_plot.png", OUT_DIR))
+
+# =============================================================================
+# 전치 여부 로지스틱 GLM: transposed_34 ~ IV1 * IV2 * IV3
+#   검정: drop1() 우도비 검정(LRT) — 전치 0%/100% 셀(완전 분리)에도 안정적
+# =============================================================================
+glm_data <- rep_df %>%
+  filter(converged %in% TRUE, !is.na(transposed_34)) %>%
+  mutate(transposed = as.numeric(transposed_34)) %>%
+  add_factors()
+
+sink(file.path(OUT_DIR, "nrm_transposition_glm.txt"))
+tryCatch({
+  cat("================================================================\n")
+  cat("GLM: NRM 경계모수 전치 여부(b3 >= b4) ~ IV1 * IV2 * IV3\n")
+  cat("family = binomial(logit)  |  검정: drop1() 우도비 검정(LRT)\n")
+  cat("================================================================\n\n")
+  cat(sprintf("수렴 반복: %d  |  전치 발생: %d (%.1f%%)\n",
+              nrow(glm_data), sum(glm_data$transposed),
+              100 * mean(glm_data$transposed)))
+  cells <- glm_data %>% group_by(f_iv1, f_iv2, f_iv3) %>%
+    summarise(p = mean(transposed), .groups = "drop")
+  cat(sprintf("완전 분리 진단: 전치 0%% 셀 %d개, 100%% 셀 %d개 (전체 %d셀)\n\n",
+              sum(cells$p == 0), sum(cells$p == 1), nrow(cells)))
+
+  ivs <- c("f_iv1", "f_iv2", "f_iv3")
+  ivs <- ivs[sapply(ivs, function(v) nlevels(droplevels(glm_data[[v]])) >= 2)]
+  if (nrow(glm_data) == 0 || var(glm_data$transposed) == 0) {
+    cat("전치 여부 분산이 0 — GLM 적합 불가\n")
+  } else if (length(ivs) == 0) {
+    cat("수준이 2개 이상인 독립변수가 없음 (조건 1개만 실행됨) — GLM 생략\n")
+  } else {
+    fml <- as.formula(paste("transposed ~", paste(ivs, collapse = " * ")))
+    cat("모형:", deparse(fml), "\n\n")
+    glm_full <- suppressWarnings(glm(fml, data = glm_data, family = binomial("logit")))
+    lrt      <- suppressWarnings(drop1(glm_full, scope = ~., test = "Chisq"))
+    lrt_col  <- intersect(c("LRT", "Chisq"), colnames(lrt))[1]
+    terms    <- rownames(lrt)[rownames(lrt) != "<none>"]
+    lrt_out  <- as.data.frame(lrt[terms, , drop = FALSE])
+    lrt_out$partial_pseudo_R2 <- lrt_out[[lrt_col]] / glm_full$null.deviance
+    cat(sprintf("Null deviance: %.2f  Residual deviance: %.2f  McFadden pseudo-R2: %.4f  AIC: %.2f\n\n",
+                glm_full$null.deviance, deviance(glm_full),
+                1 - deviance(glm_full) / glm_full$null.deviance, AIC(glm_full)))
+    cat("── Type III 우도비 검정 (각 항 제거 시 이탈도 증가) ──\n")
+    print(lrt_out, digits = 4)
+  }
+}, error = function(e) {
+  cat("\n[오류] GLM 중 에러:", conditionMessage(e), "\n")
+}, finally = sink())
+message(sprintf("저장 완료: %s/nrm_transposition_glm.txt", OUT_DIR))
