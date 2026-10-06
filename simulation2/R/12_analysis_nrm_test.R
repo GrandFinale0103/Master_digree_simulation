@@ -11,8 +11,16 @@
 #   n/prop_transposed_any— b1~b4 중 하나라도 전치된 비율            [분모: 수렴]
 #   n_tested             — 수렴 + SE 계산 성공 반복 수
 #   n/prop_reject        — |z| > 1.96 로 H0(b4 = b3) 기각 비율     [분모: n_tested]
-#   n_reject_ordered     — 기각 + z > 0  (b4 > b3 유의: 서열화)
-#   n_reject_disordered  — 기각 + z < 0  (b4 < b3 유의: 전치)
+#   경계모수 상태(b3 vs b4) × 검정 결과 교차 집계              [모두 n_tested 기준]
+#     n_ordered            — 서열화 상태(b3 < b4) 반복 수
+#     n_ordered_reject     — 서열화 상태 + H0 기각  (서열이 유의함)
+#     n_ordered_not_reject — 서열화 상태 + 기각 못 함
+#     prop_reject_ordered  — 서열화 상태 중 기각 비율 (= n_ordered_reject / n_ordered)
+#     n_trans              — 전치 상태(b3 ≥ b4) 반복 수
+#     n_trans_reject       — 전치 상태 + H0 기각  (전치가 유의함)
+#     n_trans_not_reject   — 전치 상태 + 기각 못 함
+#     prop_reject_trans    — 전치 상태 중 기각 비율 (= n_trans_reject / n_trans)
+#     prop_ordered_reject_of_tested / prop_trans_reject_of_tested — 검정 전체 대비 비율
 #   n/prop_sf_rev_34     — 채점함수 전치 (ak3 ≤ ak2 또는 ak4 ≤ ak3: b3·b4 관련) [분모: 수렴]
 #   n/prop_sf_transposed_any — ak0~ak4 중 하나라도 전치                  [분모: 수렴]
 #
@@ -93,8 +101,16 @@ summarise_block <- function(df) {
     n_tested            = sum(converged %in% TRUE & se_ok %in% TRUE),
     n_reject            = sum(converged %in% TRUE & reject_h0 %in% TRUE),
     prop_reject         = n_reject / n_tested,
-    n_reject_ordered    = sum(converged %in% TRUE & reject_h0 %in% TRUE & z > 0),
-    n_reject_disordered = sum(converged %in% TRUE & reject_h0 %in% TRUE & z < 0),
+    n_ordered            = sum(converged %in% TRUE & se_ok %in% TRUE & transposed_34 %in% FALSE),
+    n_ordered_reject     = sum(converged %in% TRUE & se_ok %in% TRUE & transposed_34 %in% FALSE & reject_h0 %in% TRUE),
+    n_ordered_not_reject = n_ordered - n_ordered_reject,
+    prop_reject_ordered  = n_ordered_reject / n_ordered,
+    n_trans              = sum(converged %in% TRUE & se_ok %in% TRUE & transposed_34 %in% TRUE),
+    n_trans_reject       = sum(converged %in% TRUE & se_ok %in% TRUE & transposed_34 %in% TRUE & reject_h0 %in% TRUE),
+    n_trans_not_reject   = n_trans - n_trans_reject,
+    prop_reject_trans    = n_trans_reject / n_trans,
+    prop_ordered_reject_of_tested = n_ordered_reject / n_tested,
+    prop_trans_reject_of_tested   = n_trans_reject / n_tested,
     mean_z              = mean(z[converged %in% TRUE], na.rm = TRUE),
     mean_b3             = mean(b3[converged %in% TRUE], na.rm = TRUE),
     mean_b4             = mean(b4[converged %in% TRUE], na.rm = TRUE),
