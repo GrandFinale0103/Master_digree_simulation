@@ -12,6 +12,8 @@
 #   n_tested             — 수렴 + SE 계산 성공 반복 수
 #   n/prop_reject        — z > 1.65 로 H0(b4 ≤ b3) 기각 비율       [분모: n_tested]
 #   n_ordered_not_sig    — 점추정은 b4 > b3 이지만 기각 못 한 반복 수
+#   n/prop_sf_rev_34     — 채점함수 전치 (ak3 ≤ ak2 또는 ak4 ≤ ak3: b3·b4 관련) [분모: 수렴]
+#   n/prop_sf_transposed_any — ak0~ak4 중 하나라도 전치                  [분모: 수렴]
 #
 # 출력 폴더: output/nrm/analysis/
 # =============================================================================
@@ -48,14 +50,21 @@ rep_df <- rep_df %>%
     iv2_b_interval = unname(IV2_MAP[substr(cond_code, 3, 4)]),
     iv3_b_mean     = unname(IV3_MAP[substr(cond_code, 5, 6)]),
     b3_true = iv3_b_mean + iv2_b_interval * 0.5,
-    b4_true = iv3_b_mean + iv2_b_interval * 1.5
+    b4_true = iv3_b_mean + iv2_b_interval * 1.5,
+    # 채점함수 전치 (ak 값에서 다시 계산 → 이전 버전 결과 파일도 처리 가능)
+    sf_rev_1 = ak1 <= ak0,
+    sf_rev_2 = ak2 <= ak1,
+    sf_rev_3 = ak3 <= ak2,
+    sf_rev_4 = ak4 <= ak3,
+    sf_transposed_any = sf_rev_1 | sf_rev_2 | sf_rev_3 | sf_rev_4
   ) %>%
   select(cond_code, rep_id, seed, iv1_sf4, iv2_b_interval, iv3_b_mean,
          success, converged, se_ok,
          a1, ak0, ak1, ak2, ak3, ak4, d0, d1, d2, d3, d4,
          b1, b2, b3, b4, b3_true, b4_true,
          diff_b4_b3, se_diff, z, p_value, reject_h0,
-         transposed_34, transposed_any, error) %>%
+         transposed_34, transposed_any,
+         sf_rev_1, sf_rev_2, sf_rev_3, sf_rev_4, sf_transposed_any, error) %>%
   arrange(cond_code, rep_id)
 
 write.csv(rep_df, file.path(OUT_DIR, "nrm_test_rep.csv"), row.names = FALSE)
@@ -70,6 +79,10 @@ summarise_block <- function(df) {
     prop_transposed_34  = n_transposed_34 / n_converged,
     n_transposed_any    = sum(converged %in% TRUE & transposed_any %in% TRUE),
     prop_transposed_any = n_transposed_any / n_converged,
+    n_sf_rev_34         = sum(converged %in% TRUE & (sf_rev_3 | sf_rev_4) %in% TRUE),
+    prop_sf_rev_34      = n_sf_rev_34 / n_converged,
+    n_sf_transposed_any = sum(converged %in% TRUE & sf_transposed_any %in% TRUE),
+    prop_sf_transposed_any = n_sf_transposed_any / n_converged,
     n_tested            = sum(converged %in% TRUE & se_ok %in% TRUE),
     n_reject            = sum(converged %in% TRUE & reject_h0 %in% TRUE),
     prop_reject         = n_reject / n_tested,

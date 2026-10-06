@@ -19,6 +19,11 @@
 #   z > Z_CRIT(1.65) 이면 H0 기각 → "서열화됨(ordered)" 증거
 #   p = P(Z > z)  (상단 단측)
 #
+# ── 4) 채점함수 전치 ──────────────────────────────────────────────────────────
+#   추정된 채점함수 ak0..ak4 가 증가하지 않으면 전치로 표시
+#   sf_rev_k = (ak_k ≤ ak_{k-1}),  k = 1..4  (b_k 계산의 분모와 같은 위치)
+#   sf_transposed_any = 하나라도 전치
+#
 # 입력 : output/responses/*_response.csv  (06_main.R 이 생성한 응답 그대로 사용)
 # 출력 : output/nrm/estimated_params/<응답파일명>_nrm.csv  (반복당 1행)
 #        output/nrm/11_log.txt
@@ -76,7 +81,9 @@ fit_nrm_one <- function(resp_path, out_dir, z_crit) {
     list(b1 = NA_real_, b2 = NA_real_, b3 = NA_real_, b4 = NA_real_,
          diff_b4_b3 = NA_real_, se_diff = NA_real_,
          z = NA_real_, p_value = NA_real_, reject_h0 = NA,
-         transposed_34 = NA, transposed_any = NA, error = "")
+         transposed_34 = NA, transposed_any = NA,
+         sf_rev_1 = NA, sf_rev_2 = NA, sf_rev_3 = NA, sf_rev_4 = NA,
+         sf_transposed_any = NA, error = "")
   )
 
   res <- tryCatch({
@@ -100,6 +107,11 @@ fit_nrm_one <- function(resp_path, out_dir, z_crit) {
     row$diff_b4_b3     <- b[4] - b[3]
     row$transposed_34  <- b[3] >= b[4]
     row$transposed_any <- any(diff(b) <= 0)
+
+    # 채점함수 전치: ak_k ≤ ak_{k-1} (sf_rev_k = 범주 k와 k+1 사이, 1부터)
+    ak_rev <- diff(unlist(p[paste0("ak", 0:4)])) <= 0
+    for (k in 1:4) row[[paste0("sf_rev_", k)]] <- ak_rev[k]
+    row$sf_transposed_any <- any(ak_rev)
 
     # 델타 방법: SE(b4 − b3)
     V <- tryCatch(stats::vcov(mod), error = function(e) NULL)
