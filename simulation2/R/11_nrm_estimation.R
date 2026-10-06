@@ -1,7 +1,7 @@
 # =============================================================================
 # 11_nrm_estimation.R  (simulation2)
 # 이미 생성된 응답 데이터에 NRM(명명반응모형)을 적용하고,
-# 문항 1의 경계모수 b3, b4 차이에 대해 단방향 검정(Approach 2)을 반복마다 수행
+# 문항 1의 경계모수 b3, b4 차이에 대해 양측 검정을 반복마다 수행
 #
 # ── 1) NRM 추정 ───────────────────────────────────────────────────────────────
 #   mirt itemtype = "nominal" (SE = TRUE)
@@ -13,11 +13,11 @@
 #   ⇒ b_k = (d_{k-1} − d_k) / (a1 · (ak_k − ak_{k-1})),   k = 1..4
 #   b3 = 범주 3과 4 사이 (범주 index 1부터), b4 = 범주 4와 5 사이
 #
-# ── 3) 단방향 검정 (Approach 2: 서열화된 경계모수 증거 탐색) ──────────────────
-#   H0: b4 ≤ b3      HA: b4 > b3
+# ── 3) 양측 검정 ─────────────────────────────────────────────────────────────
+#   H0: b4 = b3      HA: b4 ≠ b3
 #   z = (b4 − b3) / SE(b4 − b3),  SE는 델타 방법 (mirt 공분산 행렬 사용)
-#   z > Z_CRIT(1.65) 이면 H0 기각 → "서열화됨(ordered)" 증거
-#   p = P(Z > z)  (상단 단측)
+#   |z| > Z_CRIT(1.96) 이면 H0 기각
+#   p = 2 · P(Z > |z|)
 #
 # ── 4) 채점함수 전치 ──────────────────────────────────────────────────────────
 #   추정된 채점함수 ak0..ak4 가 증가하지 않으면 전치로 표시
@@ -39,7 +39,7 @@ COND_CODES_OVERRIDE <- NULL   # NULL = 응답 파일이 있는 모든 조건
 USE_PARALLEL <- TRUE
 N_CORES      <- max(1L, parallel::detectCores(logical = FALSE) - 1L)
 BATCH_SIZE   <- 200L          # 배치당 파일 수 (진행 표시·메모리 관리용)
-Z_CRIT       <- 1.65          # 단측 임계값
+Z_CRIT       <- 1.96          # 양측 임계값 (α = .05)
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
 suppressPackageStartupMessages({
@@ -134,8 +134,8 @@ fit_nrm_one <- function(resp_path, out_dir, z_crit) {
           row$se_ok     <- TRUE
           row$se_diff   <- sqrt(var_d)
           row$z         <- row$diff_b4_b3 / row$se_diff
-          row$p_value   <- pnorm(row$z, lower.tail = FALSE)
-          row$reject_h0 <- row$z > z_crit
+          row$p_value   <- 2 * pnorm(abs(row$z), lower.tail = FALSE)
+          row$reject_h0 <- abs(row$z) > z_crit
         }
       }
     }
