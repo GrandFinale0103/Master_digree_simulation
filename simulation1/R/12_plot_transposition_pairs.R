@@ -10,6 +10,8 @@
 #   output/analysis/transposition_pairs_plot.png         — 행 IV4×IV1, 열 IV2, x축 IV3
 #   output/analysis/transposition_pairs_by_interval.png  — x축 IV2(간격), 행 IV3, 열 IV4×IV1
 #   output/analysis/transposition_pairs_summary.csv      — 그래프에 쓴 비율 표
+#   output/analysis_normal/transposition_pairs_normal.png — 정규분포 조건만 (선 그래프)
+#                                                          x축 IV2, 행 IV3, 열 IV1
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -93,3 +95,31 @@ p2 <- ggplot(long_df, aes(x = iv2_b_interval, y = prop, colour = pair)) +
 ggsave("output/analysis/transposition_pairs_by_interval.png", p2,
        width = 24, height = 8, dpi = 150)
 message("저장 완료: output/analysis/transposition_pairs_by_interval.png")
+
+# ── 그래프 3: 정규분포 조건만 (27 조건) ─────────────────────────────────────
+# 간격 수준이 3개뿐이라 막대보다 선이 간격에 따른 감소 추세를 잘 보여줌
+dir.create("output/analysis_normal", recursive = TRUE, showWarnings = FALSE)
+normal_df <- long_df %>% filter(iv4_theta_dist == "normal")
+
+if (nrow(normal_df) == 0) {
+  message("건너뜀: 정규분포 조건 결과가 없습니다.")
+} else {
+  p3 <- ggplot(normal_df, aes(x = iv2_b_interval, y = prop,
+                              colour = pair, shape = pair)) +
+    geom_line(linewidth = 1.1) +
+    geom_point(size = 3) +
+    facet_grid(rows = vars(iv3), cols = vars(iv1),
+               labeller = labeller(iv3 = function(x) paste0("b Mean = ", x),
+                                   iv1 = function(x) paste0("s4 = ", x))) +
+    scale_colour_manual(values = pair_colours) +
+    scale_x_continuous(breaks = sort(unique(normal_df$iv2_b_interval))) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
+    labs(x = "b-parameter Interval (IV2)", y = "Reversal Rate",
+         colour = "Reversed pair", shape = "Reversed pair") +
+    theme_bw(base_size = 14) +
+    theme(legend.position = "bottom", strip.text = element_text(size = 12))
+
+  ggsave("output/analysis_normal/transposition_pairs_normal.png", p3,
+         width = 11, height = 9, dpi = 150)
+  message("저장 완료: output/analysis_normal/transposition_pairs_normal.png")
+}
