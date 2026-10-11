@@ -91,22 +91,29 @@ if (any(is.na(rep_df$n0)))
 
 # ── 반복 × 경계모수 long 형식 ────────────────────────────────────────────────
 long_df <- bind_rows(lapply(1:4, function(k) {
-  ak_lo <- rep_df[[paste0("ak", k - 1)]]; ak_hi <- rep_df[[paste0("ak", k)]]
-  sf    <- cbind(0, 1, 2, rep_df$iv1_sf4, 4)              # 참 채점함수 = 참 ak (a = 1)
+  # k 를 쓰는 계산은 transmute 밖에서 (안에서 k 열을 만들면 이후 k 가 열을 가리킴)
+  sf       <- cbind(0, 1, 2, rep_df$iv1_sf4, 4)           # 참 채점함수 = 참 ak (a = 1)
+  dak_vec  <- rep_df[[paste0("ak", k)]] - rep_df[[paste0("ak", k - 1)]]
+  dakt_vec <- sf[, k + 1] - sf[, k]
+  bt_vec   <- rep_df$iv3_b_mean + rep_df$iv2_b_interval * c(-1.5, -0.5, 0.5, 1.5)[k]
+  bh_vec   <- rep_df[[paste0("b", k)]]
+  num_vec  <- rep_df[[paste0("d", k - 1)]] - rep_df[[paste0("d", k)]]
+  nlo_vec  <- rep_df[[paste0("n", k - 1)]]                # 범주 k   (1부터 센 번호)
+  nhi_vec  <- rep_df[[paste0("n", k)]]                    # 범주 k+1
   rep_df %>% transmute(
     cond_code, rep_id, iv1_sf4, iv2_b_interval, iv3_b_mean, se_ok, a1,
-    param    = paste0("b", k),
-    k        = k,
-    b_hat    = .data[[paste0("b", k)]],
-    b_true   = iv3_b_mean + iv2_b_interval * c(-1.5, -0.5, 0.5, 1.5)[k],
-    err      = b_hat - b_true,
-    dak      = ak_hi - ak_lo,
-    dak_true = sf[, k + 1] - sf[, k],
-    numer    = .data[[paste0("d", k - 1)]] - .data[[paste0("d", k)]],
-    denom    = a1 * dak,
-    n_lo     = .data[[paste0("n", k - 1)]],               # 범주 k   (1부터 센 번호)
-    n_hi     = .data[[paste0("n", k)]],                   # 범주 k+1
-    n_min_adj = pmin(n_lo, n_hi)
+    param     = paste0("b", k),
+    b_hat     = bh_vec,
+    b_true    = bt_vec,
+    err       = bh_vec - bt_vec,
+    dak       = dak_vec,
+    dak_true  = dakt_vec,
+    numer     = num_vec,
+    denom     = a1 * dak_vec,
+    n_lo      = nlo_vec,
+    n_hi      = nhi_vec,
+    n_min_adj = pmin(nlo_vec, nhi_vec),
+    k         = k
   )
 })) %>%
   mutate(
