@@ -12,6 +12,7 @@
 #   output/analysis/transposition_pairs_summary.csv      — 그래프에 쓴 비율 표
 #   output/analysis_normal/transposition_pairs_normal.png — 정규분포 조건만 (선 그래프)
 #                                                          x축 IV2, 행 IV3, 열 IV1
+#   output/analysis_normal/transposition_pairs_normal_bar.png — 같은 내용의 막대 그래프
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -122,4 +123,22 @@ if (nrow(normal_df) == 0) {
   ggsave("output/analysis_normal/transposition_pairs_normal.png", p3,
          width = 11, height = 9, dpi = 150)
   message("저장 완료: output/analysis_normal/transposition_pairs_normal.png")
+}
+
+# ── 그래프 4: 정규분포 조건만 — 막대 그래프 ─────────────────────────────────
+if (nrow(normal_df) > 0) {
+  p4 <- ggplot(normal_df, aes(x = iv2, y = prop, fill = pair)) +
+    geom_col(position = position_dodge(width = 0.85), width = 0.8) +
+    facet_grid(rows = vars(iv3), cols = vars(iv1),
+               labeller = labeller(iv3 = function(x) paste0("b Mean = ", x),
+                                   iv1 = function(x) paste0("s4 = ", x))) +
+    scale_fill_manual(values = pair_colours) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
+    labs(x = "b-parameter Interval (IV2)", y = "Reversal Rate", fill = "Reversed pair") +
+    theme_bw(base_size = 14) +
+    theme(legend.position = "bottom", strip.text = element_text(size = 12))
+
+  ggsave("output/analysis_normal/transposition_pairs_normal_bar.png", p4,
+         width = 11, height = 9, dpi = 150)
+  message("저장 완료: output/analysis_normal/transposition_pairs_normal_bar.png")
 }
