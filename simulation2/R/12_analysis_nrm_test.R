@@ -165,7 +165,11 @@ add_factors <- function(df) {
 }
 
 # IV1(7행) × IV2(10열) 패널, 패널 안 x축 = IV3
-p_trans <- ggplot(add_factors(cond_df), aes(x = f_iv3, y = prop_transposed_34)) +
+# IV2는 왼쪽(좁은 간격) → 오른쪽(넓은 간격) 순서 (GPCM 전치 그래프와 동일)
+trans_plot_df <- add_factors(cond_df) %>%
+  mutate(f_iv2 = make_iv_factor(iv2_b_interval, "%.2f", decreasing = FALSE))
+
+p_trans <- ggplot(trans_plot_df, aes(x = f_iv3, y = prop_transposed_34)) +
   geom_col(fill = "steelblue") +
   facet_grid(rows = vars(f_iv1), cols = vars(f_iv2),
              labeller = labeller(f_iv1 = function(x) paste0("s4=", x),
