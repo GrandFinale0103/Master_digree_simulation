@@ -14,6 +14,9 @@
 #   output/analysis/transposition_pairs_plot.png         — 조건별 쌍별 전치 비율
 #                                                          (행 IV1 × 열 IV2, x축 IV3)
 #   output/analysis/transposition_pairs_line.png         — 같은 배치의 쌍별 선 그래프
+#   output/analysis/transposition_pairs_stack.png        — 같은 배치의 쌍별 누적 막대 그래프
+#     (한 반복에서 여러 쌍이 동시에 전치되면 합이 전체 전치 비율보다 커짐
+#      → 전체 전치 비율(prop_transposed)을 검은 점으로 표시)
 #   output/analysis/transposition_pairs_summary.csv      — 그래프에 쓴 비율 표
 # =============================================================================
 
@@ -95,3 +98,25 @@ p2 <- ggplot(long_df, aes(x = iv3, y = prop, colour = pair, shape = pair, group 
 ggsave("output/analysis/transposition_pairs_line.png", p2,
        width = 24, height = 18, dpi = 150)
 message("저장 완료: output/analysis/transposition_pairs_line.png")
+
+# ── 그래프 3: 같은 배치, 쌍별 누적 막대 + 전체 전치 비율(점) ────────────────
+total_df <- long_df %>% distinct(iv1, iv2, iv3, prop_transposed)
+p3 <- ggplot(long_df, aes(x = iv3, y = prop)) +
+  geom_col(aes(fill = pair), position = position_stack(reverse = TRUE), width = 0.7) +
+  geom_point(data = total_df, aes(y = prop_transposed, shape = "Any reversal"),
+             size = 1.6, colour = "black") +
+  facet_grid(rows = vars(iv1), cols = vars(iv2),
+             labeller = labeller(iv1 = function(x) paste0("s4=", x),
+                                 iv2 = function(x) paste0("Int=", x))) +
+  scale_fill_manual(values = pair_colours, name = "Reversed pair") +
+  scale_shape_manual(values = c("Any reversal" = 18), name = NULL) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate (stacked by pair)") +
+  theme_bw(base_size = 9) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(size = 7), axis.text = element_text(size = 7),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave("output/analysis/transposition_pairs_stack.png", p3,
+       width = 24, height = 18, dpi = 150)
+message("저장 완료: output/analysis/transposition_pairs_stack.png")

@@ -15,9 +15,14 @@
 #   output/analysis/transposition_pairs_summary.csv           — 조건별 쌍별 전치 수·비율
 #   output/analysis/transposition_pairs_bar_<분포>.png        — 분포별 막대 그래프
 #   output/analysis/transposition_pairs_line_<분포>.png       — 분포별 선 그래프
+#   output/analysis/transposition_pairs_stack_<분포>.png      — 분포별 누적 막대 그래프
 #     <분포> = normal / pos_skew / neg_skew / uniform
 #   output/analysis_normal/transposition_pairs_normal_bar.png — 정규분포 막대 그래프
 #   output/analysis_normal/transposition_pairs_normal.png     — 정규분포 선 그래프
+#   output/analysis_normal/transposition_pairs_normal_stack.png — 정규분포 누적 막대 그래프
+#
+# 누적 막대: 쌍별 비율을 쌓은 값이므로, 한 반복에서 여러 쌍이 동시에 전치되면
+#            합이 전체 전치 비율보다 커짐 → 전체 전치 비율(prop_transposed)을 검은 점으로 표시
 # =============================================================================
 
 suppressPackageStartupMessages({
@@ -89,6 +94,23 @@ plot_line <- function(df, title) {
     base_layers(title)
 }
 
+plot_stack <- function(df, title) {
+  total_df <- df %>% distinct(iv1, iv2, iv3, prop_transposed)
+  ggplot(df, aes(x = iv3, y = prop)) +
+    geom_col(aes(fill = pair), position = position_stack(reverse = TRUE), width = 0.7) +
+    geom_point(data = total_df, aes(y = prop_transposed, shape = "Any reversal"),
+               size = 2.5, colour = "black") +
+    scale_fill_manual(values = pair_colours, name = "Reversed pair") +
+    scale_shape_manual(values = c("Any reversal" = 18), name = NULL) +
+    facet_grid(rows = vars(iv1), cols = vars(iv2),
+               labeller = labeller(iv1 = function(x) paste0("s4 = ", x),
+                                   iv2 = function(x) paste0("Interval = ", x))) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    labs(title = title, x = "b-parameter Mean (IV3)", y = "Reversal Rate (stacked by pair)") +
+    theme_bw(base_size = 14) +
+    theme(legend.position = "bottom", strip.text = element_text(size = 12))
+}
+
 # ── 분포별 그래프 (output/analysis/) ─────────────────────────────────────────
 for (i in seq_along(IV4_LEVELS)) {
   dist <- IV4_LEVELS[i]
@@ -100,8 +122,9 @@ for (i in seq_along(IV4_LEVELS)) {
          plot_bar(df_d, title), width = 11, height = 9, dpi = 150)
   ggsave(sprintf("output/analysis/transposition_pairs_line_%s.png", dist),
          plot_line(df_d, title), width = 11, height = 9, dpi = 150)
-  message(sprintf("저장 완료: output/analysis/transposition_pairs_bar_%s.png / _line_%s.png",
-                  dist, dist))
+  ggsave(sprintf("output/analysis/transposition_pairs_stack_%s.png", dist),
+         plot_stack(df_d, title), width = 11, height = 9, dpi = 150)
+  message(sprintf("저장 완료: output/analysis/transposition_pairs_{bar,line,stack}_%s.png", dist))
 }
 
 # ── 정규분포 조건 그래프 (output/analysis_normal/) ───────────────────────────
@@ -112,5 +135,7 @@ if (nrow(normal_df) > 0) {
          plot_bar(normal_df, NULL), width = 11, height = 9, dpi = 150)
   ggsave("output/analysis_normal/transposition_pairs_normal.png",
          plot_line(normal_df, NULL), width = 11, height = 9, dpi = 150)
-  message("저장 완료: output/analysis_normal/transposition_pairs_normal_bar.png / _normal.png")
+  ggsave("output/analysis_normal/transposition_pairs_normal_stack.png",
+         plot_stack(normal_df, NULL), width = 11, height = 9, dpi = 150)
+  message("저장 완료: output/analysis_normal/transposition_pairs_normal{,_bar,_stack}.png")
 }
