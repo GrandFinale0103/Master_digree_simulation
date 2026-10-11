@@ -28,6 +28,10 @@
 #   nrm_transposition_plot.png — 조건별 전치 비율 그래프
 #   nrm_transposition_glm.txt  — 전치 여부 로지스틱 GLM (IV1*IV2*IV3, LRT)
 #
+# Bias / RMSE (문항 1 경계모수 b1~b4, 수렴한 반복):
+#   nrm_rmse_bias_summary.csv  — 조건 × 모수별 Bias, RMSE
+#   nrm_bias_rmse_anova.txt    — b3/b4 Bias·RMSE Type III ANOVA (IV1*IV2*IV3, 4개 표)
+#
 # 출력 폴더: output/nrm/analysis/
 # =============================================================================
 
@@ -222,3 +226,93 @@ tryCatch({
   cat("\n[오류] GLM 중 에러:", conditionMessage(e), "\n")
 }, finally = sink())
 message(sprintf("저장 완료: %s/nrm_transposition_glm.txt", OUT_DIR))
+
+# =============================================================================
+# Bias / RMSE (NRM 경계모수 b1~b4)
+#   참값: b_true = iv3_b_mean + iv2_b_interval × (−1.5, −0.5, 0.5, 1.5)
+#   오차 = NRM 추정 경계모수 − 참값
+# =============================================================================
+err_df <- rep_df %>%
+  filter(converged %in% TRUE) %>%
+  mutate(
+    err_b1 = b1 - (iv3_b_mean + iv2_b_interval * (-1.5)),
+    err_b2 = b2 - (iv3_b_mean + iv2_b_interval * (-0.5)),
+    err_b3 = b3 - b3_true,
+    err_b4 = b4 - b4_true
+  )
+
+rmse_summary <- err_df %>%
+  select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, starts_with("err_b")) %>%
+  tidyr::pivot_longer(starts_with("err_b"), names_to = "param",
+                      names_prefix = "err_", values_to = "err") %>%
+  group_by(cond_code, param, iv1_sf4, iv2_b_interval, iv3_b_mean) %>%
+  summarise(n      = sum(!is.na(err)),
+            bias   = mean(err, na.rm = TRUE),
+            rmse   = sqrt(mean(err^2, na.rm = TRUE)),
+            sd_err = sd(err, na.rm = TRUE),
+            median_err = median(err, na.rm = TRUE),
+            .groups = "drop") %>%
+  arrange(cond_code, param)
+
+write.csv(rmse_summary, file.path(OUT_DIR, "nrm_rmse_bias_summary.csv"), row.names = FALSE)
+message(sprintf("저장 완료: %s/nrm_rmse_bias_summary.csv (%d행)", OUT_DIR, nrow(rmse_summary)))
+
+# =============================================================================
+# ANOVA: b3 / b4 Bias(err)·RMSE(err²), Type III (car::Anova, contr.sum)
+# =============================================================================
+if (!requireNamespace("car", quietly = TRUE))
+  install.packages("car", repos = "https://cran.rstudio.com/")
+
+anova_data <- add_factors(err_df)
+anova_ivs  <- c("f_iv1", "f_iv2", "f_iv3")
+anova_ivs  <- anova_ivs[sapply(anova_ivs, function(v)
+  nlevels(droplevels(anova_data[[v]])) >= 2)]
+
+fit_type3_anova <- function(dv) {
+  df  <- anova_data %>% mutate(.dv = dv) %>% filter(is.finite(.dv)) %>% droplevels()
+  fml <- as.formula(paste(".dv ~", paste(anova_ivs, collapse = " * ")))
+  fit <- lm(fml, data = df,
+            contrasts = setNames(rep(list(contr.sum), length(anova_ivs)), anova_ivs))
+  tbl <- as.data.frame(car::Anova(fit, type = 3))
+  tbl[["Mean Sq"]] <- tbl[["Sum Sq"]] / tbl[["Df"]]
+  ss_tot <- sum(tbl[rownames(tbl) != "(Intercept)", "Sum Sq"], na.rm = TRUE)
+  tbl$eta_sq <- tbl[["Sum Sq"]] / ss_tot
+  list(tbl = tbl, n = nrow(df))
+}
+make_anova_df <- function(tbl) {
+  data.frame(Df = tbl[, "Df"],
+             SS = round(tbl[, "Sum Sq"], 4),
+             MS = round(tbl[, "Mean Sq"], 6),
+             F_value = round(tbl[, "F value"], 4),
+             p_value = format.pval(tbl[, "Pr(>F)"], digits = 3, eps = 0.001),
+             eta_sq  = round(tbl[, "eta_sq"], 4),
+             row.names = rownames(tbl))
+}
+
+sink(file.path(OUT_DIR, "nrm_bias_rmse_anova.txt"))
+tryCatch({
+  if (length(anova_ivs) == 0) {
+    cat("수준이 2개 이상인 독립변수가 없음 (조건 1개만 실행됨) — ANOVA 생략\n")
+  } else {
+    specs <- list(
+      list("b3 — Bias", "err_b3 = b3_NRM - b3_true (범주3-4 경계)", err_df$err_b3),
+      list("b3 — RMSE", "err_b3^2",                                  err_df$err_b3^2),
+      list("b4 — Bias", "err_b4 = b4_NRM - b4_true (범주4-5 경계)", err_df$err_b4),
+      list("b4 — RMSE", "err_b4^2",                                  err_df$err_b4^2)
+    )
+    for (sp in specs) {
+      res <- fit_type3_anova(sp[[3]])
+      cat(strrep("=", 64), "\n")
+      cat(sprintf("ANOVA [%s]  (NRM 추정)\n종속변수: %s\n", sp[[1]], sp[[2]]))
+      cat(sprintf("독립변수: %s  |  Type III SS (car::Anova, contr.sum)\n",
+                  paste(anova_ivs, collapse = " * ")))
+      cat(strrep("=", 64), "\n\n")
+      cat(sprintf("수렴 반복 수: %d\n\n", res$n))
+      print(make_anova_df(res$tbl))
+      cat("\n")
+    }
+  }
+}, error = function(e) {
+  cat("\n[오류] ANOVA 중 에러:", conditionMessage(e), "\n")
+}, finally = sink())
+message(sprintf("저장 완료: %s/nrm_bias_rmse_anova.txt", OUT_DIR))
