@@ -13,8 +13,7 @@
 # 출력:
 #   output/analysis/transposition_pairs_plot.png         — 조건별 쌍별 전치 비율
 #                                                          (행 IV1 × 열 IV2, x축 IV3)
-#   output/analysis/transposition_pairs_by_interval.png  — x축 IV2(간격)로 본 쌍별 전치 비율
-#                                                          (행 IV3 × 열 IV1)
+#   output/analysis/transposition_pairs_line.png         — 같은 배치의 쌍별 선 그래프
 #   output/analysis/transposition_pairs_summary.csv      — 그래프에 쓴 비율 표
 # =============================================================================
 
@@ -77,22 +76,22 @@ ggsave("output/analysis/transposition_pairs_plot.png", p1,
        width = 24, height = 18, dpi = 150)
 message("저장 완료: output/analysis/transposition_pairs_plot.png")
 
-# ── 그래프 2: x축 = 경계모수 간격, 쌍별 선 ────────────────────────────────────
-p2 <- ggplot(long_df, aes(x = iv2_b_interval, y = prop, colour = pair)) +
+# ── 그래프 2: 같은 배치(행 IV1 × 열 IV2, x축 IV3), 쌍별 선 ─────────────────────
+p2 <- ggplot(long_df, aes(x = iv3, y = prop, colour = pair, shape = pair, group = pair)) +
   geom_line(linewidth = 0.7) +
   geom_point(size = 1.4) +
-  facet_grid(rows = vars(iv3), cols = vars(iv1),
-             labeller = labeller(iv3 = function(x) paste0("Mean=", x),
-                                 iv1 = function(x) paste0("s4=", x))) +
+  facet_grid(rows = vars(iv1), cols = vars(iv2),
+             labeller = labeller(iv1 = function(x) paste0("s4=", x),
+                                 iv2 = function(x) paste0("Int=", x))) +
   scale_colour_manual(values = pair_colours) +
-  scale_x_continuous(breaks = sort(unique(long_df$iv2_b_interval))) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
-  labs(x = "b-parameter Interval (IV2)", y = "Reversal Rate", colour = "Reversed pair") +
-  theme_bw(base_size = 10) +
+  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate",
+       colour = "Reversed pair", shape = "Reversed pair") +
+  theme_bw(base_size = 9) +
   theme(legend.position = "bottom",
-        strip.text = element_text(size = 8), axis.text = element_text(size = 7),
-        axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
+        strip.text = element_text(size = 7), axis.text = element_text(size = 7),
+        axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggsave("output/analysis/transposition_pairs_by_interval.png", p2,
-       width = 18, height = 10, dpi = 150)
-message("저장 완료: output/analysis/transposition_pairs_by_interval.png")
+ggsave("output/analysis/transposition_pairs_line.png", p2,
+       width = 24, height = 18, dpi = 150)
+message("저장 완료: output/analysis/transposition_pairs_line.png")
