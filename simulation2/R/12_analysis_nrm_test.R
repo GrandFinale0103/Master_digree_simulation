@@ -31,6 +31,7 @@
 # Bias / RMSE (문항 1 경계모수 b1~b4, 수렴한 반복):
 #   nrm_rmse_bias_summary.csv  — 조건 × 모수별 Bias, RMSE
 #   nrm_bias_rmse_anova.txt    — b3/b4 Bias·RMSE Type III ANOVA (IV1*IV2*IV3, 4개 표)
+#   nrm_rmse_bias_plot_b_bias.png / nrm_rmse_bias_plot_b_rmse.png — b1~b4 그래프
 #
 # 출력 폴더: output/nrm/analysis/
 # =============================================================================
@@ -316,3 +317,43 @@ tryCatch({
   cat("\n[오류] ANOVA 중 에러:", conditionMessage(e), "\n")
 }, finally = sink())
 message(sprintf("저장 완료: %s/nrm_bias_rmse_anova.txt", OUT_DIR))
+
+# =============================================================================
+# Bias / RMSE 그래프 (b1~b4)
+#   행: 모수(b1~b4), 열: IV2(간격, 큰→작은) × IV1(s4), 패널 x축: IV3
+# =============================================================================
+b_params <- c("b1", "b2", "b3", "b4")
+plot_b <- rmse_summary %>%
+  filter(param %in% b_params) %>%
+  add_factors() %>%
+  mutate(param = factor(param, levels = b_params,
+                        labels = c("b\u2081", "b\u2082", "b\u2083", "b\u2084")))
+
+common_layers <- list(
+  facet_grid(rows = vars(param), cols = vars(f_iv2, f_iv1),
+             labeller = labeller(f_iv2 = function(x) paste0("Int=", x),
+                                 f_iv1 = function(x) paste0("s4=", x),
+                                 param = label_value)),
+  labs(x = "b-parameter Mean (IV3)"),
+  theme_bw(base_size = 8),
+  theme(strip.text = element_text(size = 6), axis.text = element_text(size = 6),
+        axis.title = element_text(size = 8),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+)
+
+p_bias <- ggplot(plot_b, aes(x = f_iv3, y = bias, group = 1)) +
+  geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
+  geom_line(linewidth = 0.6, colour = "steelblue") +
+  geom_point(size = 1.2, colour = "steelblue") +
+  labs(y = "Bias (NRM)") + common_layers
+ggsave(file.path(OUT_DIR, "nrm_rmse_bias_plot_b_bias.png"), p_bias,
+       width = 42, height = 12, dpi = 150, limitsize = FALSE)
+message(sprintf("저장 완료: %s/nrm_rmse_bias_plot_b_bias.png", OUT_DIR))
+
+p_rmse <- ggplot(plot_b, aes(x = f_iv3, y = rmse, group = 1)) +
+  geom_line(linewidth = 0.6, colour = "firebrick") +
+  geom_point(size = 1.2, colour = "firebrick") +
+  labs(y = "RMSE (NRM)") + common_layers
+ggsave(file.path(OUT_DIR, "nrm_rmse_bias_plot_b_rmse.png"), p_rmse,
+       width = 42, height = 12, dpi = 150, limitsize = FALSE)
+message(sprintf("저장 완료: %s/nrm_rmse_bias_plot_b_rmse.png", OUT_DIR))
