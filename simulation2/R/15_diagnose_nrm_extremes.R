@@ -32,6 +32,7 @@
 #   extreme_cause_table.csv — 원인 조합별 빈도
 #   extreme_summary.txt     — 기준, 제외 수, 극단×부적절 교차표, 원인 분포, 유령 비교
 #   extreme_rate_plot.png   — 조건별 극단 반복 비율 (기존 전치 그래프 배치)
+#   extreme_rate_by_param_bar.png — 조건별·경계모수별 극단 오차 비율 막대 (같은 배치)
 #   extreme_resp_dist.png   — 극단/정상 반복의 범주 응답 비율 상자그림
 #   extreme_vs_sparse.png   — 양옆 범주 최소 응답 수 vs |오차|
 #   case_<조건>_rep<번호>_b<k>.png — 대표 사례: 참/추정 범주 반응 곡선
@@ -299,6 +300,23 @@ run_diag <- function(params, label) {
     theme(strip.text = element_text(size = 7), axis.text = element_text(size = 7),
           axis.text.x = element_text(angle = 45, hjust = 1))
   ggsave(out("extreme_rate_plot.png"), p1, width = 24, height = 18, dpi = 150)
+
+  # ── 그래프 1-b: 경계모수별 극단 오차 비율 (전치 쌍별 막대 그래프와 같은 배치) ──
+  param_colours <- c(b1 = "#4C9BE8", b2 = "#59A14F", b3 = "#F2A541", b4 = "#D1495B")
+  p1b <- ggplot(add_factors(cond_df), aes(x = iv3, y = prop_extreme, fill = param)) +
+    geom_col(position = position_dodge(width = 0.8), width = 0.75) +
+    facet_grid(rows = vars(iv1), cols = vars(iv2),
+               labeller = labeller(iv1 = function(x) paste0("s4=", x),
+                                   iv2 = function(x) paste0("Int=", x))) +
+    scale_fill_manual(values = param_colours[params], name = "Boundary") +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    labs(x = "b-parameter Mean (IV3)",
+         y = sprintf("Extreme-error rate (|error| >= %g)", ERR_CUT)) +
+    theme_bw(base_size = 9) +
+    theme(legend.position = "bottom",
+          strip.text = element_text(size = 7), axis.text = element_text(size = 7),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  ggsave(out("extreme_rate_by_param_bar.png"), p1b, width = 24, height = 18, dpi = 150)
 
   # ── 그래프 2: 범주 응답 비율 (극단 vs 정상 반복) ──
   p2_df <- rep_level %>% filter(!is.na(prop0)) %>%
