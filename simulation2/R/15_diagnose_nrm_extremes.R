@@ -357,11 +357,13 @@ run_diag <- function(params, label) {
     bt <- rr$iv3_b_mean + rr$iv2_b_interval * c(-1.5, -0.5, 0.5, 1.5)
     p_true <- gpcm_crc(theta, bt, sf)
     p_est  <- nrm_crc(theta, rr$a1, unlist(rr[paste0("ak", 0:4)]), unlist(rr[paste0("d", 0:4)]))
+    cat_names <- paste("Cat", 1:5)
+    p_true <- unname(p_true); colnames(p_true) <- cat_names
+    p_est  <- unname(p_est);  colnames(p_est)  <- cat_names
     crc <- bind_rows(
-      data.frame(theta, p_true, model = "True (GPCM, generating)"),
-      data.frame(theta, p_est,  model = "Estimated (NRM)")) %>%
-      setNames(c("theta", paste("Cat", 1:5), "model")) %>%
-      pivot_longer(starts_with("Cat"), names_to = "category", values_to = "p")
+      data.frame(theta = theta, p_true, model = "True (GPCM, generating)", check.names = FALSE),
+      data.frame(theta = theta, p_est,  model = "Estimated (NRM)",         check.names = FALSE)) %>%
+      pivot_longer(all_of(cat_names), names_to = "category", values_to = "p")
     sub <- sprintf("counts (ghosts excl.): %s | ghosts: %s (cats %s) | ak: %s | %s err = %.2f",
                    paste(unlist(rr[paste0("n", 0:4)]), collapse = "/"),
                    ifelse(is.na(cs$n_ghost), "NA", cs$n_ghost),
