@@ -40,7 +40,8 @@
 #
 # b34 폴더 추가 출력
 #   transposition_decomposition.png / .csv — b3·b4 전치를 원인별(둘 다/극단 오차만/
-#                                            채점함수 전치만/둘 다 아님) 누적 막대로 분해
+#                                            채점함수 이상만/둘 다 아님) 누적 막대로 분해
+#                                            채점함수 이상 = Δak ≤ 0 또는 |Δak| < DAK_CUT
 # =============================================================================
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -418,14 +419,15 @@ run_diag(c("b3", "b4"),             "b34")
 # 4. b3·b4 전치 비율 분해 (output/nrm/diagnostics/b34/)
 #   전치(b3 ≥ b4)된 반복을 원인별로 나눔 — 분모: 수렴 반복
 #     극단 오차   : |b3 오차| ≥ ERR_CUT 또는 |b4 오차| ≥ ERR_CUT
-#     채점함수 전치: ak3 ≤ ak2 또는 ak4 ≤ ak3  (b3·b4 분모의 부호가 뒤집힘)
-#   범주: 둘 다 / 극단 오차만 / 채점함수 전치만 / 둘 다 아님(깨끗한 전치)
+#     채점함수 이상: b3·b4 분모 Δak (ak3 − ak2, ak4 − ak3) 중 하나라도
+#                    Δak ≤ 0 (채점함수 전치) 또는 |Δak| < DAK_CUT (분모 붕괴)
+#   범주: 둘 다 / 극단 오차만 / 채점함수 이상만 / 둘 다 아님(깨끗한 전치)
 # =============================================================================
 dec_dir <- file.path(DIAG_DIR, "b34")
 dir.create(dec_dir, recursive = TRUE, showWarnings = FALSE)
 
-DEC_LEVELS  <- c("Both (extreme + SF reversal)", "Extreme error only",
-                 "SF reversal only", "Neither (clean reversal)")
+DEC_LEVELS  <- c("Both (extreme + SF reversal/near-zero \u0394ak)", "Extreme error only",
+                 "SF reversal/near-zero \u0394ak only", "Neither (clean reversal)")
 dec_colours <- setNames(c("#6A3D9A", "#D1495B", "#F2A541", "#4C9BE8"), DEC_LEVELS)
 
 dec_rep <- rep_df %>%
@@ -434,7 +436,9 @@ dec_rep <- rep_df %>%
     err4 = b4 - (iv3_b_mean + iv2_b_interval * 1.5),
     trans34  = b3 >= b4,
     extreme  = abs(err3) >= ERR_CUT | abs(err4) >= ERR_CUT,
-    sf_rev   = (ak3 - ak2) <= 0 | (ak4 - ak3) <= 0,
+    dak3     = ak3 - ak2,
+    dak4     = ak4 - ak3,
+    sf_rev   = dak3 <= 0 | dak4 <= 0 | abs(dak3) < DAK_CUT | abs(dak4) < DAK_CUT,
     cause = case_when(
       !trans34            ~ NA_character_,
       extreme & sf_rev    ~ DEC_LEVELS[1],
