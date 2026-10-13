@@ -11,10 +11,18 @@
 #   excl_extreme        — 1) 극단 오차 반복 제외
 #   excl_extreme_sfrev  — 2) 극단 오차 반복 + 채점함수 이상(전치·분모 붕괴) 반복 제외
 #
+# 전치 비율 집계 (12·14·15번 NRM 전치 그래프와 같은 기준)
+#   전치 = 인접 경계모수 쌍 중 하나라도 b_k ≥ b_{k+1}
+#   전치 비율 = (제외되지 않은 반복 중 전치된 반복 수) / (조건의 전체 수렴 반복 수)
+#   → 15번 전치 분해 그래프(all_b/transposition_decomposition.png)와 정확히 맞음
+#      excl_extreme       = "채점함수 이상만" + "둘 다 아님"
+#      excl_extreme_sfrev = "둘 다 아님"
+#   Bias/RMSE 는 제외 후 남은 반복으로 계산
+#
 # 입력: output/nrm/analysis/nrm_test_rep.csv  (12_analysis_nrm_test.R 출력)
 # 출력: output/nrm/excluded/<시나리오>/
-#   summary_cond.csv           — 조건별 남은 반복 수, 제외 수, b3·b4 전치 비율, b1~b4 Bias/RMSE
-#   transposition_plot.png     — b3 ≥ b4 전치 비율 (행 IV1, 열 IV2 좁음→넓음, x축 IV3)
+#   summary_cond.csv           — 조건별 수렴·남은·제외 반복 수, 전치 비율(분모: 수렴 반복), b1~b4 Bias/RMSE
+#   transposition_plot.png     — 전치 비율 (행 IV1, 열 IV2 좁음→넓음, x축 IV3)
 #   rmse_bias_plot_b_bias.png  — b1~b4 Bias (12번 NRM 그래프와 같은 배치)
 #   rmse_bias_plot_b_rmse.png  — b1~b4 RMSE
 #   exclusion_rate_plot.png    — 조건별 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치)
@@ -51,7 +59,7 @@ rep_df <- read.csv(in_path, stringsAsFactors = FALSE,
       dak <- cbind(ak1 - ak0, ak2 - ak1, ak3 - ak2, ak4 - ak3)
       rowSums(dak <= 0 | abs(dak) < DAK_CUT) > 0
     },
-    trans34    = b3 >= b4
+    transposed = b1 >= b2 | b2 >= b3 | b3 >= b4
   )
 
 n_all <- rep_df %>% count(cond_code, name = "n_converged")
@@ -62,10 +70,16 @@ run_scenario <- function(keep, label, desc) {
   out <- function(f) file.path(out_dir, f)
   kept <- rep_df[keep, ]
 
-  trans_cond <- kept %>%
+  # 분모 = 조건의 전체 수렴 반복 (제외된 반복도 분모에 남김)
+  trans_cond <- rep_df %>%
+    mutate(kept_rep = keep) %>%
     group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean) %>%
-    summarise(n_kept = n(), n_transposed_34 = sum(trans34), .groups = "drop") %>%
-    mutate(prop_transposed_34 = n_transposed_34 / n_kept)
+    summarise(n_converged  = n(),
+              n_kept       = sum(kept_rep),
+              n_transposed = sum(transposed & kept_rep), .groups = "drop") %>%
+    mutate(n_excluded      = n_converged - n_kept,
+           prop_excluded   = n_excluded / n_converged,
+           prop_transposed = n_transposed / n_converged)
 
   err_cond <- kept %>%
     select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, err_b1:err_b4) %>%
@@ -73,10 +87,7 @@ run_scenario <- function(keep, label, desc) {
     group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, param) %>%
     summarise(bias = mean(err), rmse = sqrt(mean(err^2)), .groups = "drop")
 
-  summary_cond <- n_all %>%
-    left_join(trans_cond, by = "cond_code") %>%
-    mutate(n_kept = coalesce(n_kept, 0L), n_excluded = n_converged - n_kept,
-           prop_excluded = n_excluded / n_converged) %>%
+  summary_cond <- trans_cond %>%
     left_join(err_cond %>%
                 pivot_wider(id_cols = cond_code, names_from = param,
                             values_from = c(bias, rmse)),
@@ -88,14 +99,14 @@ run_scenario <- function(keep, label, desc) {
     mutate(iv1 = make_num_factor(iv1_sf4, "%.2f"),
            iv2 = make_num_factor(iv2_b_interval, "%.2f", decreasing = FALSE),
            iv3 = make_num_factor(iv3_b_mean, "%.1f")) %>%
-    ggplot(aes(x = iv3, y = prop_transposed_34)) +
+    ggplot(aes(x = iv3, y = prop_transposed)) +
     geom_col(fill = "steelblue") +
     facet_grid(rows = vars(iv1), cols = vars(iv2),
                labeller = labeller(iv1 = function(x) paste0("s4=", x),
                                    iv2 = function(x) paste0("Int=", x))) +
     scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
     labs(title = desc, x = "b-parameter Mean (IV3)",
-         y = "Reversal Rate (NRM, b3 ≥ b4)") +
+         y = "Reversal Rate (NRM, any adjacent pair; denominator = all converged reps)") +
     theme_bw(base_size = 9) +
     theme(strip.text = element_text(size = 7), axis.text = element_text(size = 7),
           axis.text.x = element_text(angle = 45, hjust = 1))
@@ -135,8 +146,8 @@ run_scenario <- function(keep, label, desc) {
          width = 42, height = 12, dpi = 150, limitsize = FALSE)
 
   # ── 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치) ──
-  EX_LEVELS  <- c("Both (extreme + SF reversal/near-zero \u0394ak)", "Extreme error only",
-                  "SF reversal/near-zero \u0394ak only")
+  EX_LEVELS  <- c("Both (extreme + SF reversal/near-zero dak)", "Extreme error only",
+                  "SF reversal/near-zero dak only")
   ex_colours <- setNames(c("#6A3D9A", "#D1495B", "#F2A541"), EX_LEVELS)
   ex_cond <- rep_df %>%
     mutate(excluded = !keep,
@@ -181,5 +192,5 @@ run_scenario <- function(keep, label, desc) {
 run_scenario(!rep_df$is_extreme, "excl_extreme",
              sprintf("Excluding extreme errors (|error| >= %g)", ERR_CUT))
 run_scenario(!rep_df$is_extreme & !rep_df$is_sfrev, "excl_extreme_sfrev",
-             sprintf("Excluding extreme errors (|error| >= %g) and scoring-function reversals / near-zero \u0394ak (|\u0394ak| < %g)",
+             sprintf("Excluding extreme errors (|error| >= %g) and scoring-function reversals / near-zero dak (|dak| < %g)",
                      ERR_CUT, DAK_CUT))

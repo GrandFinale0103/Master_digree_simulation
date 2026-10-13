@@ -209,11 +209,11 @@ summary_df <- long_df %>%
   summarise(
     n_total      = n(),
     n_converged  = sum(converged,  na.rm = TRUE),
-    n_transposed = sum(transposed, na.rm = TRUE),
+    n_transposed = sum(transposed[converged %in% TRUE], na.rm = TRUE),
     prop_transposed = n_transposed / n_converged,
-    n_12 = sum(grepl("12", which_transposed), na.rm = TRUE),
-    n_23 = sum(grepl("23", which_transposed), na.rm = TRUE),
-    n_34 = sum(grepl("34", which_transposed), na.rm = TRUE),
+    n_12 = sum(converged %in% TRUE & grepl("12", which_transposed)),
+    n_23 = sum(converged %in% TRUE & grepl("23", which_transposed)),
+    n_34 = sum(converged %in% TRUE & grepl("34", which_transposed)),
     .groups = "drop"
   )
 

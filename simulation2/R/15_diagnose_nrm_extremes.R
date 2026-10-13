@@ -38,10 +38,13 @@
 #   case_<조건>_rep<번호>_b<k>.png — 대표 사례: 참/추정 범주 반응 곡선
 #   extreme_glm.txt         — 극단 반복 여부 ~ IV1*IV2*IV3 로지스틱 GLM (LRT)
 #
-# b34 폴더 추가 출력
-#   transposition_decomposition.png / .csv — b3·b4 전치를 원인별(둘 다/극단 오차만/
-#                                            채점함수 이상만/둘 다 아님) 누적 막대로 분해
-#                                            채점함수 이상 = Δak ≤ 0 또는 |Δak| < DAK_CUT
+# all_b 폴더 추가 출력
+#   transposition_decomposition.png / .csv — 전치(인접 쌍 중 하나라도)를 원인별(둘 다/극단 오차만/
+#                                            채점함수 이상만/둘 다 아님) 누적 막대로 분해 (분모: 수렴 반복)
+#                                            극단 오차 = b1~b4 중 하나라도 |오차| ≥ ERR_CUT
+#                                            채점함수 이상 = Δak1~Δak4 중 하나라도 Δak ≤ 0 또는 |Δak| < DAK_CUT
+#   transposition_decomposition_share.png  — 전치된 반복 안에서의 원인 구성비 (작은 범주 확인용)
+#   transposition_decomposition_counts.txt — 범주별 반복 수 합계
 # =============================================================================
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -416,75 +419,107 @@ run_diag(c("b1", "b2", "b3", "b4"), "all_b")
 run_diag(c("b3", "b4"),             "b34")
 
 # =============================================================================
-# 4. b3·b4 전치 비율 분해 (output/nrm/diagnostics/b34/)
-#   전치(b3 ≥ b4)된 반복을 원인별로 나눔 — 분모: 수렴 반복
-#     극단 오차   : |b3 오차| ≥ ERR_CUT 또는 |b4 오차| ≥ ERR_CUT
-#     채점함수 이상: b3·b4 분모 Δak (ak3 − ak2, ak4 − ak3) 중 하나라도
-#                    Δak ≤ 0 (채점함수 전치) 또는 |Δak| < DAK_CUT (분모 붕괴)
+# 4. 전치 비율 분해 (output/nrm/diagnostics/all_b/)
+#   전치 = 인접 경계모수 쌍 중 하나라도 b_k ≥ b_{k+1}  (GPCM·12번 NRM 전치 그래프와 같은 기준)
+#   전치된 반복을 원인별로 나눔 — 분모: 수렴 반복 (b1~b4 모두 계산된 반복)
+#     극단 오차    : b1~b4 중 하나라도 |오차| ≥ ERR_CUT
+#     채점함수 이상: Δak1~Δak4 중 하나라도 Δak ≤ 0 (채점함수 전치) 또는 |Δak| < DAK_CUT (분모 붕괴)
 #   범주: 둘 다 / 극단 오차만 / 채점함수 이상만 / 둘 다 아님(깨끗한 전치)
+#   → 네 범주의 합 = 12번 nrm_transposition_plot.png 의 전치 비율
+#   → 16번 excl_extreme 전치 비율       = 채점함수 이상만 + 둘 다 아님
+#      16번 excl_extreme_sfrev 전치 비율 = 둘 다 아님
+#
+#   극단 오차는 대부분 분모 a1·Δak 가 0에 가까워서 생기므로 "극단 오차만" 범주는
+#   실제 데이터에서 거의 없을 수 있음 → 범주별 반복 수를 transposition_decomposition_counts.txt 에 기록,
+#   전치 반복 안에서의 원인 구성비(transposition_decomposition_share.png)도 따로 그림
 # =============================================================================
-dec_dir <- file.path(DIAG_DIR, "b34")
+dec_dir <- file.path(DIAG_DIR, "all_b")
 dir.create(dec_dir, recursive = TRUE, showWarnings = FALSE)
 
-DEC_LEVELS  <- c("Both (extreme + SF reversal/near-zero \u0394ak)", "Extreme error only",
-                 "SF reversal/near-zero \u0394ak only", "Neither (clean reversal)")
+DEC_LEVELS  <- c("Both (extreme + SF reversal/near-zero dak)", "Extreme error only",
+                 "SF reversal/near-zero dak only", "Neither (clean reversal)")
 dec_colours <- setNames(c("#6A3D9A", "#D1495B", "#F2A541", "#4C9BE8"), DEC_LEVELS)
 
 dec_rep <- rep_df %>%
+  filter(!is.na(b1), !is.na(b2), !is.na(b3), !is.na(b4)) %>%
   mutate(
-    err3 = b3 - (iv3_b_mean + iv2_b_interval * 0.5),
-    err4 = b4 - (iv3_b_mean + iv2_b_interval * 1.5),
-    trans34  = b3 >= b4,
-    extreme  = abs(err3) >= ERR_CUT | abs(err4) >= ERR_CUT,
-    dak3     = ak3 - ak2,
-    dak4     = ak4 - ak3,
-    sf_rev   = dak3 <= 0 | dak4 <= 0 | abs(dak3) < DAK_CUT | abs(dak4) < DAK_CUT,
+    transposed = b1 >= b2 | b2 >= b3 | b3 >= b4,
+    extreme    = pmax(abs(b1 - (iv3_b_mean + iv2_b_interval * -1.5)),
+                      abs(b2 - (iv3_b_mean + iv2_b_interval * -0.5)),
+                      abs(b3 - (iv3_b_mean + iv2_b_interval *  0.5)),
+                      abs(b4 - (iv3_b_mean + iv2_b_interval *  1.5))) >= ERR_CUT,
+    sf_rev     = {
+      dak <- cbind(ak1 - ak0, ak2 - ak1, ak3 - ak2, ak4 - ak3)
+      rowSums(dak <= 0 | abs(dak) < DAK_CUT) > 0
+    },
     cause = case_when(
-      !trans34            ~ NA_character_,
+      !transposed         ~ NA_character_,
       extreme & sf_rev    ~ DEC_LEVELS[1],
       extreme & !sf_rev   ~ DEC_LEVELS[2],
       !extreme & sf_rev   ~ DEC_LEVELS[3],
       TRUE                ~ DEC_LEVELS[4])
-  ) %>%
-  filter(!is.na(trans34))
+  )
 
 dec_cond <- dec_rep %>%
   group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean) %>%
   summarise(
-    n_converged   = n(),
-    n_transposed  = sum(trans34),
-    n_both        = sum(cause == DEC_LEVELS[1], na.rm = TRUE),
-    n_extreme_only = sum(cause == DEC_LEVELS[2], na.rm = TRUE),
-    n_sfrev_only  = sum(cause == DEC_LEVELS[3], na.rm = TRUE),
-    n_clean       = sum(cause == DEC_LEVELS[4], na.rm = TRUE),
+    n_converged    = n(),
+    n_transposed   = sum(transposed),
+    n_both         = sum(cause %in% DEC_LEVELS[1]),
+    n_extreme_only = sum(cause %in% DEC_LEVELS[2]),
+    n_sfrev_only   = sum(cause %in% DEC_LEVELS[3]),
+    n_clean        = sum(cause %in% DEC_LEVELS[4]),
     .groups = "drop") %>%
   mutate(prop_transposed = n_transposed / n_converged,
          prop_both = n_both / n_converged, prop_extreme_only = n_extreme_only / n_converged,
          prop_sfrev_only = n_sfrev_only / n_converged, prop_clean = n_clean / n_converged)
 write.csv(dec_cond, file.path(dec_dir, "transposition_decomposition.csv"), row.names = FALSE)
 
+# 범주별 반복 수 (그래프에 안 보이는 범주가 실제로 0인지 확인용)
+sink(file.path(dec_dir, "transposition_decomposition_counts.txt"))
+tryCatch({
+  cat("NRM 전치(인접 쌍 중 하나라도) 원인 분해 — 전체 조건 합계\n")
+  cat(sprintf("기준: 극단 오차 |오차| >= %g (b1~b4), 채점함수 이상 Δak <= 0 또는 |Δak| < %g (Δak1~Δak4)\n\n",
+              ERR_CUT, DAK_CUT))
+  tot <- colSums(dec_cond[, c("n_converged", "n_transposed", "n_both",
+                              "n_extreme_only", "n_sfrev_only", "n_clean")])
+  print(data.frame(n = tot, prop_of_converged = round(tot / tot[["n_converged"]], 5),
+                   prop_of_transposed = round(tot / tot[["n_transposed"]], 5)))
+  cat("\n전치되지 않은 반복의 극단 오차·채점함수 이상 (참고)\n")
+  print(with(dec_rep[!dec_rep$transposed, ], table(extreme, sf_rev, useNA = "ifany")))
+}, finally = sink())
+
 dec_long <- dec_cond %>%
-  select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean,
+  select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, n_transposed,
+         n_both, n_extreme_only, n_sfrev_only, n_clean,
          prop_both, prop_extreme_only, prop_sfrev_only, prop_clean) %>%
-  pivot_longer(starts_with("prop_"), names_to = "cause", values_to = "prop") %>%
-  mutate(cause = factor(cause,
-                        levels = c("prop_both", "prop_extreme_only", "prop_sfrev_only", "prop_clean"),
+  pivot_longer(c(n_both, n_extreme_only, n_sfrev_only, n_clean,
+                 prop_both, prop_extreme_only, prop_sfrev_only, prop_clean),
+               names_to = c(".value", "cause"), names_pattern = "^(n|prop)_(.*)$") %>%
+  mutate(share = ifelse(n_transposed > 0, n / n_transposed, 0),
+         cause = factor(cause, levels = c("both", "extreme_only", "sfrev_only", "clean"),
                         labels = DEC_LEVELS)) %>%
   add_factors()
 
-p_dec <- ggplot(dec_long, aes(x = iv3, y = prop, fill = cause)) +
-  geom_col(position = position_stack(reverse = TRUE), width = 0.7) +
-  facet_grid(rows = vars(iv1), cols = vars(iv2),
-             labeller = labeller(iv1 = function(x) paste0("s4=", x),
-                                 iv2 = function(x) paste0("Int=", x))) +
-  scale_fill_manual(values = dec_colours, name = NULL) +
-  scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
-  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate of b3 & b4 (NRM), by cause") +
-  theme_bw(base_size = 9) +
-  theme(legend.position = "bottom",
-        strip.text = element_text(size = 7), axis.text = element_text(size = 7),
-        axis.text.x = element_text(angle = 45, hjust = 1)) +
-  guides(fill = guide_legend(nrow = 1))
-ggsave(file.path(dec_dir, "transposition_decomposition.png"), p_dec,
-       width = 24, height = 18, dpi = 150)
-message(sprintf("저장 완료: %s/transposition_decomposition.png / .csv", dec_dir))
+dec_plot <- function(yvar, ylab, fname) {
+  p <- ggplot(dec_long, aes(x = iv3, y = .data[[yvar]], fill = cause)) +
+    geom_col(position = position_stack(reverse = TRUE), width = 0.7) +
+    facet_grid(rows = vars(iv1), cols = vars(iv2),
+               labeller = labeller(iv1 = function(x) paste0("s4=", x),
+                                   iv2 = function(x) paste0("Int=", x))) +
+    scale_fill_manual(values = dec_colours, name = NULL, drop = FALSE) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    coord_cartesian(ylim = c(0, 1)) +
+    labs(x = "b-parameter Mean (IV3)", y = ylab) +
+    theme_bw(base_size = 9) +
+    theme(legend.position = "bottom",
+          strip.text = element_text(size = 7), axis.text = element_text(size = 7),
+          axis.text.x = element_text(angle = 45, hjust = 1)) +
+    guides(fill = guide_legend(nrow = 1))
+  ggsave(file.path(dec_dir, fname), p, width = 24, height = 18, dpi = 150)
+}
+dec_plot("prop",  "Reversal Rate (NRM, any adjacent pair), by cause",
+         "transposition_decomposition.png")
+dec_plot("share", "Share of reversed replications, by cause",
+         "transposition_decomposition_share.png")
+message(sprintf("저장 완료: %s/transposition_decomposition{,_share}.png / .csv / _counts.txt", dec_dir))

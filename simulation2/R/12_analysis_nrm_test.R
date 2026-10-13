@@ -7,8 +7,9 @@
 #
 # 조건별 집계 (nrm_test_cond.csv):
 #   n_converged          — 수렴 성공 반복 수
-#   n/prop_transposed_34 — b3 ≥ b4 (범주3-4, 4-5 경계 전치) 비율   [분모: 수렴]
-#   n/prop_transposed_any— b1~b4 중 하나라도 전치된 비율            [분모: 수렴]
+#   n/prop_transposed_34 — b3 ≥ b4 (범주3-4, 4-5 경계 전치) 비율   [분모: 수렴 + 경계모수 계산됨]
+#   n/prop_transposed_any— b1~b4 중 하나라도 전치된 비율            [분모: 수렴 + 경계모수 계산됨]
+#                          (14·15·16번 NRM 전치 그래프와 같은 분모)
 #   n_tested             — 수렴 + SE 계산 성공 반복 수
 #   n/prop_reject        — |z| > 1.96 로 H0(b4 = b3) 기각 비율     [분모: n_tested]
 #   경계모수 상태(b3 vs b4) × 검정 결과 교차 집계              [모두 n_tested 기준]
@@ -24,8 +25,10 @@
 #   n/prop_sf_rev_34     — 채점함수 전치 (ak3 ≤ ak2 또는 ak4 ≤ ak3: b3·b4 관련) [분모: 수렴]
 #   n/prop_sf_transposed_any — ak0~ak4 중 하나라도 전치                  [분모: 수렴]
 #
-# 전치 분석 (b3 ≥ b4, 수렴한 반복):
-#   nrm_transposition_plot.png — 조건별 전치 비율 그래프
+# 전치 분석 (인접 경계모수 쌍 중 하나라도 b_k ≥ b_{k+1}, 수렴한 반복):
+#   GPCM 전치 분석(08_analysis_transposition.R)과 같은 기준
+#   쌍별(b1&b2, b2&b3, b3&b4) 비율은 14_plot_nrm_transposition_pairs.R 참고
+#   nrm_transposition_plot.png — 조건별 전치 비율 그래프 (prop_transposed_any)
 #   nrm_transposition_glm.txt  — 전치 여부 로지스틱 GLM (IV1*IV2*IV3, LRT)
 #
 # Bias / RMSE (문항 1 경계모수 b1~b4, 수렴한 반복):
@@ -72,6 +75,10 @@ rep_df <- rep_df %>%
     iv3_b_mean     = unname(IV3_MAP[substr(cond_code, 5, 6)]),
     b3_true = iv3_b_mean + iv2_b_interval * 0.5,
     b4_true = iv3_b_mean + iv2_b_interval * 1.5,
+    # 경계모수 전치 (b 값에서 다시 계산 → 14·15·16번과 같은 판정, ±Inf 경계모수도 처리)
+    b_ok           = !is.na(b1) & !is.na(b2) & !is.na(b3) & !is.na(b4),
+    transposed_34  = ifelse(b_ok, b3 >= b4, NA),
+    transposed_any = ifelse(b_ok, b1 >= b2 | b2 >= b3 | b3 >= b4, NA),
     # 채점함수 전치 (ak 값에서 다시 계산 → 이전 버전 결과 파일도 처리 가능)
     sf_rev_1 = ak1 <= ak0,
     sf_rev_2 = ak2 <= ak1,
@@ -103,9 +110,9 @@ summarise_block <- function(df) {
     n_success           = sum(success, na.rm = TRUE),
     n_converged         = sum(converged %in% TRUE),
     n_transposed_34     = sum(converged %in% TRUE & transposed_34 %in% TRUE),
-    prop_transposed_34  = n_transposed_34 / n_converged,
+    prop_transposed_34  = n_transposed_34 / sum(converged %in% TRUE & !is.na(transposed_34)),
     n_transposed_any    = sum(converged %in% TRUE & transposed_any %in% TRUE),
-    prop_transposed_any = n_transposed_any / n_converged,
+    prop_transposed_any = n_transposed_any / sum(converged %in% TRUE & !is.na(transposed_any)),
     n_sf_rev_34         = sum(converged %in% TRUE & (sf_rev_3 | sf_rev_4) %in% TRUE),
     prop_sf_rev_34      = n_sf_rev_34 / n_converged,
     n_sf_transposed_any = sum(converged %in% TRUE & sf_transposed_any %in% TRUE),
@@ -150,7 +157,7 @@ tryCatch({
 message(sprintf("저장 완료: %s/nrm_test_overall.txt", OUT_DIR))
 
 # =============================================================================
-# 전치 비율 그래프 (b3 ≥ b4)
+# 전치 비율 그래프 (인접 쌍 중 하나라도 전치 — GPCM 전치 그래프와 같은 기준)
 # =============================================================================
 make_iv_factor <- function(x, fmt, decreasing = FALSE) {
   vals <- sort(unique(na.omit(x)), decreasing = decreasing)
@@ -169,13 +176,13 @@ add_factors <- function(df) {
 trans_plot_df <- add_factors(cond_df) %>%
   mutate(f_iv2 = make_iv_factor(iv2_b_interval, "%.2f", decreasing = FALSE))
 
-p_trans <- ggplot(trans_plot_df, aes(x = f_iv3, y = prop_transposed_34)) +
+p_trans <- ggplot(trans_plot_df, aes(x = f_iv3, y = prop_transposed_any)) +
   geom_col(fill = "steelblue") +
   facet_grid(rows = vars(f_iv1), cols = vars(f_iv2),
              labeller = labeller(f_iv1 = function(x) paste0("s4=", x),
                                  f_iv2 = function(x) paste0("Int=", x))) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
-  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate (NRM, b3 \u2265 b4)") +
+  labs(x = "b-parameter Mean (IV3)", y = "Reversal Rate (NRM, any adjacent pair)") +
   theme_bw(base_size = 9) +
   theme(strip.text = element_text(size = 7), axis.text = element_text(size = 7),
         axis.text.x = element_text(angle = 45, hjust = 1))
@@ -184,18 +191,18 @@ ggsave(file.path(OUT_DIR, "nrm_transposition_plot.png"), p_trans,
 message(sprintf("저장 완료: %s/nrm_transposition_plot.png", OUT_DIR))
 
 # =============================================================================
-# 전치 여부 로지스틱 GLM: transposed_34 ~ IV1 * IV2 * IV3
+# 전치 여부 로지스틱 GLM: transposed_any ~ IV1 * IV2 * IV3
 #   검정: drop1() 우도비 검정(LRT) — 전치 0%/100% 셀(완전 분리)에도 안정적
 # =============================================================================
 glm_data <- rep_df %>%
-  filter(converged %in% TRUE, !is.na(transposed_34)) %>%
-  mutate(transposed = as.numeric(transposed_34)) %>%
+  filter(converged %in% TRUE, !is.na(transposed_any)) %>%
+  mutate(transposed = as.numeric(transposed_any)) %>%
   add_factors()
 
 sink(file.path(OUT_DIR, "nrm_transposition_glm.txt"))
 tryCatch({
   cat("================================================================\n")
-  cat("GLM: NRM 경계모수 전치 여부(b3 >= b4) ~ IV1 * IV2 * IV3\n")
+  cat("GLM: NRM 경계모수 전치 여부(인접 쌍 중 하나라도 b_k >= b_k+1) ~ IV1 * IV2 * IV3\n")
   cat("family = binomial(logit)  |  검정: drop1() 우도비 검정(LRT)\n")
   cat("================================================================\n\n")
   cat(sprintf("수렴 반복: %d  |  전치 발생: %d (%.1f%%)\n",
