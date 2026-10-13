@@ -16,6 +16,7 @@
 #   transposition_plot.png     — b3 ≥ b4 전치 비율 (행 IV1, 열 IV2 좁음→넓음, x축 IV3)
 #   rmse_bias_plot_b_bias.png  — b1~b4 Bias (12번 NRM 그래프와 같은 배치)
 #   rmse_bias_plot_b_rmse.png  — b1~b4 RMSE
+#   exclusion_rate_plot.png    — 조건별 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치)
 # =============================================================================
 
 ERR_CUT <- 3
@@ -127,6 +128,45 @@ run_scenario <- function(keep, label, desc) {
     labs(y = "RMSE (NRM)") + common_layers
   ggsave(out("rmse_bias_plot_b_rmse.png"), p_rmse,
          width = 42, height = 12, dpi = 150, limitsize = FALSE)
+
+  # ── 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치) ──
+  EX_LEVELS  <- c("Both (extreme + SF reversal)", "Extreme error only", "SF reversal only")
+  ex_colours <- setNames(c("#6A3D9A", "#D1495B", "#F2A541"), EX_LEVELS)
+  ex_cond <- rep_df %>%
+    mutate(excluded = !keep,
+           reason = case_when(!excluded              ~ NA_character_,
+                              is_extreme & is_sfrev  ~ EX_LEVELS[1],
+                              is_extreme             ~ EX_LEVELS[2],
+                              TRUE                   ~ EX_LEVELS[3])) %>%
+    group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean) %>%
+    mutate(n_converged = n()) %>%
+    filter(excluded) %>%
+    group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, n_converged, reason) %>%
+    summarise(n = n(), .groups = "drop") %>%
+    mutate(prop = n / n_converged,
+           reason = factor(reason, levels = EX_LEVELS))
+  ex_plot_df <- n_all %>%
+    left_join(rep_df %>% distinct(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean), by = "cond_code") %>%
+    left_join(ex_cond %>% select(cond_code, reason, prop), by = "cond_code") %>%
+    mutate(prop = coalesce(prop, 0),
+           iv1 = make_num_factor(iv1_sf4, "%.2f"),
+           iv2 = make_num_factor(iv2_b_interval, "%.2f", decreasing = FALSE),
+           iv3 = make_num_factor(iv3_b_mean, "%.1f"))
+  p_ex <- ggplot(ex_plot_df %>% filter(!is.na(reason)),
+                 aes(x = iv3, y = prop, fill = reason)) +
+    geom_col(position = position_stack(reverse = TRUE), width = 0.7) +
+    geom_blank(data = ex_plot_df, aes(x = iv3), inherit.aes = FALSE) +
+    facet_grid(rows = vars(iv1), cols = vars(iv2), drop = FALSE,
+               labeller = labeller(iv1 = function(x) paste0("s4=", x),
+                                   iv2 = function(x) paste0("Int=", x))) +
+    scale_fill_manual(values = ex_colours, name = "Excluded because", drop = FALSE) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1), limits = c(0, 1)) +
+    labs(title = desc, x = "b-parameter Mean (IV3)", y = "Excluded replications (%)") +
+    theme_bw(base_size = 9) +
+    theme(legend.position = "bottom",
+          strip.text = element_text(size = 7), axis.text = element_text(size = 7),
+          axis.text.x = element_text(angle = 45, hjust = 1))
+  ggsave(out("exclusion_rate_plot.png"), p_ex, width = 24, height = 18, dpi = 150)
 
   message(sprintf("[%s] 남은 반복 %d / %d (제외 %.1f%%) → %s/",
                   label, sum(keep), length(keep), 100 * mean(!keep), out_dir))
