@@ -1,14 +1,15 @@
 # =============================================================================
 # 16_plot_nrm_excluded.R  (simulation2, NRM 추정 결과)
-# 극단 오차 / 채점함수 전치 반복을 제외한 뒤 전치 비율, Bias, RMSE 재계산·시각화
+# 극단 오차 / 채점함수 이상(전치·분모 붕괴) 반복을 제외한 뒤 전치 비율, Bias, RMSE 재계산·시각화
 #
 # 제외는 반복 단위 (전치 비율과 Bias/RMSE가 같은 반복 집합에서 계산되도록)
 #   극단 오차      : b1~b4 중 하나라도 |b̂_k − b_k| ≥ ERR_CUT
-#   채점함수 전치  : ak_k ≤ ak_{k−1} 인 k 가 하나라도 있음 (k = 1..4)
+#   채점함수 이상  : Δak_k = ak_k − ak_{k−1} 이 ≤ 0 (전치) 또는 |Δak_k| < DAK_CUT (분모 붕괴)
+#                    인 k 가 하나라도 있음 (k = 1..4)
 #
 # 시나리오
 #   excl_extreme        — 1) 극단 오차 반복 제외
-#   excl_extreme_sfrev  — 2) 극단 오차 반복 + 채점함수 전치 반복 제외
+#   excl_extreme_sfrev  — 2) 극단 오차 반복 + 채점함수 이상(전치·분모 붕괴) 반복 제외
 #
 # 입력: output/nrm/analysis/nrm_test_rep.csv  (12_analysis_nrm_test.R 출력)
 # 출력: output/nrm/excluded/<시나리오>/
@@ -19,7 +20,8 @@
 #   exclusion_rate_plot.png    — 조건별 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치)
 # =============================================================================
 
-ERR_CUT <- 3
+ERR_CUT <- 3     # 극단 오차: |오차| ≥ ERR_CUT
+DAK_CUT <- 0.1   # 분모 붕괴: |Δak| < DAK_CUT
 
 suppressPackageStartupMessages({
   library(dplyr)
@@ -45,7 +47,10 @@ rep_df <- read.csv(in_path, stringsAsFactors = FALSE,
     err_b3 = b3 - (iv3_b_mean + iv2_b_interval *  0.5),
     err_b4 = b4 - (iv3_b_mean + iv2_b_interval *  1.5),
     is_extreme = pmax(abs(err_b1), abs(err_b2), abs(err_b3), abs(err_b4)) >= ERR_CUT,
-    is_sfrev   = (ak1 <= ak0) | (ak2 <= ak1) | (ak3 <= ak2) | (ak4 <= ak3),
+    is_sfrev   = {
+      dak <- cbind(ak1 - ak0, ak2 - ak1, ak3 - ak2, ak4 - ak3)
+      rowSums(dak <= 0 | abs(dak) < DAK_CUT) > 0
+    },
     trans34    = b3 >= b4
   )
 
@@ -130,7 +135,8 @@ run_scenario <- function(keep, label, desc) {
          width = 42, height = 12, dpi = 150, limitsize = FALSE)
 
   # ── 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치) ──
-  EX_LEVELS  <- c("Both (extreme + SF reversal)", "Extreme error only", "SF reversal only")
+  EX_LEVELS  <- c("Both (extreme + SF reversal/near-zero \u0394ak)", "Extreme error only",
+                  "SF reversal/near-zero \u0394ak only")
   ex_colours <- setNames(c("#6A3D9A", "#D1495B", "#F2A541"), EX_LEVELS)
   ex_cond <- rep_df %>%
     mutate(excluded = !keep,
@@ -175,4 +181,5 @@ run_scenario <- function(keep, label, desc) {
 run_scenario(!rep_df$is_extreme, "excl_extreme",
              sprintf("Excluding extreme errors (|error| >= %g)", ERR_CUT))
 run_scenario(!rep_df$is_extreme & !rep_df$is_sfrev, "excl_extreme_sfrev",
-             sprintf("Excluding extreme errors (|error| >= %g) and scoring-function reversals", ERR_CUT))
+             sprintf("Excluding extreme errors (|error| >= %g) and scoring-function reversals / near-zero \u0394ak (|\u0394ak| < %g)",
+                     ERR_CUT, DAK_CUT))
