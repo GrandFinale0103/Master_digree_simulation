@@ -41,6 +41,7 @@
 #   limit_rmse_plot.png       — 극한값 기준 RMSE  (같은 배치)
 #   limit_asym_bias_plot.png  — 극한 Bias (b_limit − b_true_std)  (같은 배치)
 #   limit_values_plot_b3.png / _b4.png — 참값·극한값·추정 평균 비교 (행 IV4, 열 IV1 × IV2)
+# 정규분포 조건만: output/analysis_normal/limit/  (11_analysis_normal_only.R 과 같은 배치, 4단계 참고)
 # =============================================================================
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -299,3 +300,64 @@ for (pp in c("b3", "b4")) {
   ggsave(out(sprintf("limit_values_plot_%s.png", pp)), p, width = 14, height = 10, dpi = 150)
   message(sprintf("저장 완료: %s", out(sprintf("limit_values_plot_%s.png", pp))))
 }
+
+# =============================================================================
+# 4. 정규분포 조건만 (IV4 = normal, 27 조건) — 11_analysis_normal_only.R 과 같은 폴더·배치
+#   출력: output/analysis_normal/limit/
+#     limit_bias_summary.csv       — 조건 × 모수(b3, b4)별 지표 (위 2단계와 같은 정의)
+#     limit_bias_plot.png          — 극한값 기준 Bias  (행 모수, 열 간격 × s4, x축 IV3)
+#     limit_rmse_plot.png          — 극한값 기준 RMSE
+#     limit_asym_bias_plot.png     — 극한 Bias (극한값 − 참값)
+#     limit_values_plot.png        — 참값·극한값·추정 평균 비교
+# =============================================================================
+NORM_DIR <- "output/analysis_normal/limit"
+dir.create(NORM_DIR, recursive = TRUE, showWarnings = FALSE)
+nout <- function(f) file.path(NORM_DIR, f)
+
+norm_df <- summary_df %>%
+  filter(iv4_theta_dist == "normal") %>%
+  select(-iv4_theta_dist, -iv4_label, -b_true_std)   # 정규분포는 b_true_std = b_true
+write.csv(norm_df, nout("limit_bias_summary.csv"), row.names = FALSE)
+message(sprintf("저장 완료: %s (%d행)", nout("limit_bias_summary.csv"), nrow(norm_df)))
+
+norm_plot_df <- norm_df %>%
+  mutate(f_iv1 = make_num_factor(iv1_sf4,        "%.2f"),
+         f_iv2 = make_num_factor(iv2_b_interval, "%.1f", decreasing = TRUE),
+         f_iv3 = make_num_factor(iv3_b_mean,     "%.1f"),
+         param = factor(param, levels = c("b3", "b4")))
+
+norm_layers <- list(
+  facet_grid(rows = vars(param), cols = vars(f_iv2, f_iv1),
+             labeller = labeller(f_iv2 = function(x) paste0("Interval = ", x),
+                                 f_iv1 = function(x) paste0("s4 = ", x),
+                                 param = label_value)),
+  labs(x = "b-parameter Mean (IV3)"),
+  theme_bw(base_size = 14),
+  theme(strip.text = element_text(size = 11), axis.text = element_text(size = 11))
+)
+norm_line_plot <- function(yvar, ylab, colour, fname, zero_line = TRUE) {
+  p <- ggplot(norm_plot_df, aes(x = f_iv3, y = .data[[yvar]], group = 1))
+  if (zero_line) p <- p + geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4)
+  p <- p + geom_line(linewidth = 0.7, colour = colour) + geom_point(size = 1.8, colour = colour) +
+    labs(y = ylab) + norm_layers
+  ggsave(nout(fname), p, width = 16, height = 7, dpi = 150)
+  message(sprintf("저장 완료: %s", nout(fname)))
+}
+norm_line_plot("bias_limit", "Bias relative to limit (estimate - limit)", "steelblue", "limit_bias_plot.png")
+norm_line_plot("rmse_limit", "RMSE relative to limit", "firebrick", "limit_rmse_plot.png", zero_line = FALSE)
+norm_line_plot("asym_bias",  "Asymptotic bias (limit - true)", "darkgreen", "limit_asym_bias_plot.png")
+
+norm_vals <- norm_plot_df %>%
+  select(f_iv1, f_iv2, f_iv3, param, b_true, b_limit, mean_est) %>%
+  pivot_longer(c(b_true, b_limit, mean_est), names_to = "what", values_to = "value") %>%
+  mutate(what = factor(what, levels = c("b_true", "b_limit", "mean_est"),
+                       labels = c("True", "Limit (N -> inf)", "Mean estimate")))
+p_nv <- ggplot(norm_vals, aes(x = f_iv3, y = value, colour = what, linetype = what, group = what)) +
+  geom_line(linewidth = 0.7) + geom_point(size = 1.8) +
+  scale_colour_manual(values = c("True" = "grey30", "Limit (N -> inf)" = "#4C9BE8",
+                                 "Mean estimate" = "#D1495B"), name = NULL) +
+  scale_linetype_manual(values = c("dashed", "solid", "solid"), name = NULL) +
+  labs(y = "Boundary parameter") + norm_layers +
+  theme(legend.position = "bottom")
+ggsave(nout("limit_values_plot.png"), p_nv, width = 16, height = 8, dpi = 150)
+message(sprintf("저장 완료: %s", nout("limit_values_plot.png")))
