@@ -26,10 +26,13 @@
 # 입력: output/nrm/analysis/nrm_test_rep.csv  (12_analysis_nrm_test.R 출력)
 # 출력: output/nrm/param_bias/<반복 집합>/
 #   param_bias_summary.csv   — 조건 × 모수별 n, 참값, 추정 평균, Bias, RMSE, 중앙값 편향, MdAE
-#   alpha_bias_rmse.png      — α 의 Bias(위)·RMSE(아래)
-#   sk_bias.png / sk_rmse.png — s1, s2, s3 의 Bias / RMSE
-#   ck_bias.png / ck_rmse.png — c1~c4 의 Bias / RMSE
+#                              (Bias·RMSE 는 모수 하나씩 따로 계산 — 모수끼리 합치지 않음)
+#   <모수>_bias.png / <모수>_rmse.png — 모수마다 따로 그린 그래프 (모수 8개 × 2 = 16개)
+#     alpha_bias.png, alpha_rmse.png              — 기울기 α
+#     s1_bias.png ~ s3_bias.png, s1_rmse.png ~ s3_rmse.png — 채점함수 s1, s2, s3
+#     c1_bias.png ~ c4_bias.png, c1_rmse.png ~ c4_rmse.png — 절편 c1 ~ c4
 #   (배치: 행 IV1(s4), 열 IV2(간격, 좁음→넓음), 패널 x축 IV3(평균) — 전치 그래프와 같음)
+#   대상: 문항 1 (조작 문항) 의 모수만 — 11번이 문항 1 모수만 저장하므로 nrm_test_rep.csv 에는 문항 1만 있음
 # =============================================================================
 
 ERR_CUT <- 3     # 극단 오차: |b̂ − b| ≥ ERR_CUT   (15·16번과 같은 값)
@@ -79,8 +82,6 @@ rep_df <- rep_df %>%
   )
 
 PARAMS <- c("alpha", "s1", "s2", "s3", "c1", "c2", "c3", "c4")
-PARAM_LABELS <- c(alpha = "alpha", s1 = "s1", s2 = "s2", s3 = "s3",
-                  c1 = "c1", c2 = "c2", c3 = "c3", c4 = "c4")
 
 long_all <- rep_df %>%
   select(cond_code, rep_id, iv1_sf4, iv2_b_interval, iv3_b_mean, is_extreme, is_sfrev,
@@ -103,24 +104,29 @@ add_factors <- function(df) {
                 iv2 = make_num_factor(iv2_b_interval, "%.2f"),   # 좁음 → 넓음
                 iv3 = make_num_factor(iv3_b_mean,     "%.1f"))
 }
-param_colours <- c(alpha = "#333333",
-                   s1 = "#4C9BE8", s2 = "#59A14F", s3 = "#D1495B",
-                   c1 = "#4C9BE8", c2 = "#59A14F", c3 = "#F2A541", c4 = "#D1495B")
+PARAM_TITLES <- c(alpha = "alpha (slope, true = 1)",
+                  s1 = "s1 (scoring function, true = 1)",
+                  s2 = "s2 (scoring function, true = 2)",
+                  s3 = "s3 (scoring function, true = s4)",
+                  c1 = "c1 (intercept)", c2 = "c2 (intercept)",
+                  c3 = "c3 (intercept)", c4 = "c4 (intercept)")
 
-group_plot <- function(df, params, yvar, ylab, title, path, zero_line = TRUE) {
-  pd <- df %>% filter(param %in% params) %>%
-    mutate(param = factor(param, levels = params))
-  p <- ggplot(pd, aes(x = iv3, y = .data[[yvar]], colour = param, group = param))
-  if (zero_line) p <- p + geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4)
-  p <- p + geom_line(linewidth = 0.7) + geom_point(size = 1.4) +
+# 모수 하나의 Bias 또는 RMSE 그래프
+param_plot <- function(df, pp, yvar, desc, path) {
+  pd <- df %>% filter(param == pp)
+  is_bias <- yvar == "bias"
+  colour  <- if (is_bias) "steelblue" else "firebrick"
+  p <- ggplot(pd, aes(x = iv3, y = .data[[yvar]], group = 1))
+  if (is_bias) p <- p + geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4)
+  p <- p + geom_line(linewidth = 0.7, colour = colour) + geom_point(size = 1.4, colour = colour) +
     facet_grid(rows = vars(iv1), cols = vars(iv2),
                labeller = labeller(iv1 = function(x) paste0("s4=", x),
                                    iv2 = function(x) paste0("Int=", x))) +
-    scale_colour_manual(values = param_colours[params], labels = PARAM_LABELS[params], name = NULL) +
-    labs(title = title, x = "b-parameter Mean (IV3)", y = ylab) +
+    labs(title = sprintf("Item 1 NRM: %s - %s", PARAM_TITLES[[pp]], desc),
+         x = "b-parameter Mean (IV3)",
+         y = sprintf("%s of %s", if (is_bias) "Bias" else "RMSE", pp)) +
     theme_bw(base_size = 9) +
-    theme(legend.position = "bottom",
-          strip.text = element_text(size = 7), axis.text = element_text(size = 7),
+    theme(strip.text = element_text(size = 7), axis.text = element_text(size = 7),
           axis.text.x = element_text(angle = 45, hjust = 1))
   ggsave(path, p, width = 24, height = 18, dpi = 150)
 }
@@ -150,35 +156,11 @@ run_set <- function(keep_fun, label, desc) {
 
   pdf <- add_factors(summary_df %>% mutate(param = as.character(param)))
 
-  # α: Bias 와 RMSE 를 한 그림에 (색으로 구분)
-  alpha_df <- pdf %>% filter(param == "alpha") %>%
-    select(iv1, iv2, iv3, bias, rmse) %>%
-    pivot_longer(c(bias, rmse), names_to = "metric", values_to = "value") %>%
-    mutate(metric = factor(metric, levels = c("bias", "rmse"), labels = c("Bias", "RMSE")))
-  p_a <- ggplot(alpha_df, aes(x = iv3, y = value, colour = metric, group = metric)) +
-    geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) +
-    geom_line(linewidth = 0.7) + geom_point(size = 1.4) +
-    facet_grid(rows = vars(iv1), cols = vars(iv2),
-               labeller = labeller(iv1 = function(x) paste0("s4=", x),
-                                   iv2 = function(x) paste0("Int=", x))) +
-    scale_colour_manual(values = c(Bias = "steelblue", RMSE = "firebrick"), name = NULL) +
-    labs(title = paste0("alpha (slope, true = 1) - ", desc),
-         x = "b-parameter Mean (IV3)", y = "alpha: Bias / RMSE") +
-    theme_bw(base_size = 9) +
-    theme(legend.position = "bottom",
-          strip.text = element_text(size = 7), axis.text = element_text(size = 7),
-          axis.text.x = element_text(angle = 45, hjust = 1))
-  ggsave(out("alpha_bias_rmse.png"), p_a, width = 24, height = 18, dpi = 150)
-
-  s_par <- c("s1", "s2", "s3"); c_par <- c("c1", "c2", "c3", "c4")
-  group_plot(pdf, s_par, "bias", "Bias of scoring function s_k",
-             paste0("Scoring function s_k (true: 1, 2, s4) - ", desc), out("sk_bias.png"))
-  group_plot(pdf, s_par, "rmse", "RMSE of scoring function s_k",
-             paste0("Scoring function s_k - ", desc), out("sk_rmse.png"), zero_line = FALSE)
-  group_plot(pdf, c_par, "bias", "Bias of intercept c_k",
-             paste0("Intercept c_k - ", desc), out("ck_bias.png"))
-  group_plot(pdf, c_par, "rmse", "RMSE of intercept c_k",
-             paste0("Intercept c_k - ", desc), out("ck_rmse.png"), zero_line = FALSE)
+  # 모수마다 따로: Bias 1장, RMSE 1장
+  for (pp in PARAMS) {
+    param_plot(pdf, pp, "bias", desc, out(sprintf("%s_bias.png", pp)))
+    param_plot(pdf, pp, "rmse", desc, out(sprintf("%s_rmse.png", pp)))
+  }
 
   n_rep <- n_distinct(paste(ld$cond_code, ld$rep_id))
   message(sprintf("[%s] 반복 %d개 → %s/", label, n_rep, out_dir))
