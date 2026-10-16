@@ -19,6 +19,11 @@
 # 입력: output/nrm/analysis/nrm_test_rep.csv  (12_analysis_nrm_test.R 출력, 문항 1 모수만 있음)
 # 출력: output/nrm/response_curves/<반복 집합>/
 #   curve_params_<stat>.csv          — 조건별 요약 모수(α, s0~s4, c0~c4)와 그로 계산한 경계모수 b1~b4
+#   b_comparison_<stat>.csv          — 조건 × b1~b4: 참값, 요약 모수로 계산한 b(곡선의 경계),
+#                                      b̂ 의 평균·중앙값, 각각의 편향, Δs_k ≤ 0 인 반복 비율
+#     ※ Bias(18·21번 등) = mean(b̂) − b 이고, 곡선의 경계는 mean(α, s, c) 로 계산한 b 라서 서로 다름
+#       b_k = (c_{k−1} − c_k)/(α Δs_k) 가 비율이므로, Δs_k 가 0 근처이거나 음수(전치)인 반복에서
+#       b̂_k 가 크게 튀거나 부호가 뒤집혀 b̂ 평균만 끌려감 → 곡선은 참값과 비슷해도 Bias 는 클 수 있음
 #   crc_<stat>_mean<IV3>.png         — 범주반응곡선 (IV3 수준마다 1장, 행 IV1 × 열 IV2)
 #   생성 모형 = 점선, NRM 추정 = 실선, 색 = 범주(1~5), 회색 세로선 = 생성 모형의 경계모수 b1~b4
 # =============================================================================
@@ -125,15 +130,43 @@ run_set <- function(keep, label, desc) {
     par_df <- kept %>%
       group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean) %>%
       summarise(n = n(),
-                alpha = fun(a1), s1 = fun(ak1), s2 = fun(ak2), s3 = fun(ak3),
-                c1 = fun(d1), c2 = fun(d2), c3 = fun(d3), c4 = fun(d4),
+                alpha = fun(a1),
+                s0 = fun(ak0), s1 = fun(ak1), s2 = fun(ak2), s3 = fun(ak3), s4 = fun(ak4),
+                c0 = fun(d0), c1 = fun(d1), c2 = fun(d2), c3 = fun(d3), c4 = fun(d4),
                 .groups = "drop") %>%
-      mutate(s0 = 0, s4 = 4, c0 = 0,
-             b1_curve = (c0 - c1) / (alpha * (s1 - s0)),
+      mutate(b1_curve = (c0 - c1) / (alpha * (s1 - s0)),
              b2_curve = (c1 - c2) / (alpha * (s2 - s1)),
              b3_curve = (c2 - c3) / (alpha * (s3 - s2)),
              b4_curve = (c3 - c4) / (alpha * (s4 - s3)))
     write.csv(par_df, out(sprintf("curve_params_%s.csv", stat)), row.names = FALSE)
+
+    # 요약 모수로 계산한 경계모수(곡선의 경계) vs 반복별 경계모수 추정값의 평균·중앙값
+    # b_k = (c_{k-1} − c_k) / (α Δs_k) 는 비선형(비율)이라 "모수 평균으로 만든 b" ≠ "b̂ 의 평균"
+    # 특히 Δs_k ≤ 0 (채점함수 전치) 인 반복은 b̂_k 부호가 뒤집혀 b̂ 평균만 크게 끌어당김
+    b_cmp <- bind_rows(lapply(1:4, function(k) {
+      dk <- kept[[paste0("ak", k)]] - kept[[paste0("ak", k - 1)]]
+      data.frame(cond_code = kept$cond_code, param = paste0("b", k),
+                 b_hat = kept[[paste0("b", k)]], dak = dk, stringsAsFactors = FALSE)
+    })) %>%
+      filter(!is.nan(b_hat)) %>%
+      group_by(cond_code, param) %>%
+      summarise(mean_b_hat   = mean(b_hat[is.finite(b_hat)]),
+                median_b_hat = median(b_hat),
+                share_ds_le0 = mean(dak <= 0),
+                .groups = "drop") %>%
+      left_join(par_df %>%
+                  select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, starts_with("b") & ends_with("_curve")) %>%
+                  pivot_longer(ends_with("_curve"), names_to = "param", values_to = "b_curve") %>%
+                  mutate(param = sub("_curve$", "", param)),
+                by = c("cond_code", "param")) %>%
+      mutate(b_true = iv3_b_mean + iv2_b_interval * B_OFFSET[as.integer(sub("b", "", param))],
+             bias_mean_b_hat   = mean_b_hat - b_true,
+             bias_median_b_hat = median_b_hat - b_true,
+             bias_b_curve      = b_curve - b_true) %>%
+      select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, param, b_true, b_curve,
+             mean_b_hat, median_b_hat, bias_b_curve, bias_mean_b_hat, bias_median_b_hat, share_ds_le0) %>%
+      arrange(cond_code, param)
+    write.csv(b_cmp, out(sprintf("b_comparison_%s.csv", stat)), row.names = FALSE)
 
     curves <- bind_rows(lapply(seq_len(nrow(par_df)), function(i) {
       r  <- par_df[i, ]
