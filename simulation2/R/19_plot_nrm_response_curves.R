@@ -1,16 +1,14 @@
 # =============================================================================
 # 19_plot_nrm_response_curves.R  (simulation2, NRM 추정 결과)
-# 문항 1의 생성 모형 곡선과, 추정된 NRM 모수의 평균(또는 중앙값)으로 만든 곡선을 겹쳐 그림
+# 문항 1의 생성 모형 범주반응곡선과, 추정된 NRM 모수의 평균(또는 중앙값)으로 만든
+# 범주반응곡선을 겹쳐 그림
 #
-# ── 경계반응곡선 (boundary response curve, 인접 범주형) ──────────────────────
-#   범주 k−1 과 k 중 k 를 고를 확률:  P(X=k | X∈{k−1, k}, θ)
-#     생성 모형(GPCM, 채점함수 0,1,2,s4,4): logit = a · w_k · (θ − b_k),  w_k = sf_k − sf_{k−1}
-#     NRM 추정                            : logit = α (s_k − s_{k−1}) θ + (c_k − c_{k−1})
-#   → 곡선이 0.5 를 지나는 θ 가 경계모수 b_k  (NRM: b_k = (c_{k−1} − c_k) / (α (s_k − s_{k−1})))
-#     기울기의 부호가 음수(s_k < s_{k−1}, 채점함수 전치)면 곡선이 감소함
-#
-# ── 범주반응곡선 (category response curve, 참고) ──────────────────────────────
+# ── 범주반응곡선 (category response curve) ───────────────────────────────────
 #   P(X=k | θ),  k = 0..4  (그래프 표기는 범주 1~5)
+#     생성 모형(GPCM, 채점함수 0,1,2,s4,4): η_k = Σ_{j≤k} a · w_j · (θ − b_j),  w_j = sf_j − sf_{j−1}
+#     NRM 추정                            : η_k = α · s_k · θ + c_k
+#     P(X=k | θ) = exp(η_k) / Σ_m exp(η_m)
+#   생성 모형을 NRM 모수로 쓰면 α = 1, s = (0, 1, 2, s4, 4), c_k = −Σ_{j≤k} w_j b_j
 #
 # ── 추정 곡선의 모수 ─────────────────────────────────────────────────────────
 #   조건마다 반복들의 α, s1~s3, c1~c4 를 SUMMARY_STAT("mean" 또는 "median")으로 요약해
@@ -20,10 +18,9 @@
 #
 # 입력: output/nrm/analysis/nrm_test_rep.csv  (12_analysis_nrm_test.R 출력, 문항 1 모수만 있음)
 # 출력: output/nrm/response_curves/<반복 집합>/
-#   curve_params_<stat>.csv          — 조건별 요약 모수(α, s0~s4, c0~c4)와 그로 계산한 b1~b4
-#   brf_<stat>_mean<IV3>.png         — 경계반응곡선 (IV3 수준마다 1장, 행 IV1 × 열 IV2)
-#   crc_<stat>_mean<IV3>.png         — 범주반응곡선 (같은 배치)
-#   생성 모형 = 점선, NRM 추정 = 실선, 색 = 경계(b1~b4) 또는 범주(1~5)
+#   curve_params_<stat>.csv          — 조건별 요약 모수(α, s0~s4, c0~c4)와 그로 계산한 경계모수 b1~b4
+#   crc_<stat>_mean<IV3>.png         — 범주반응곡선 (IV3 수준마다 1장, 행 IV1 × 열 IV2)
+#   생성 모형 = 점선, NRM 추정 = 실선, 색 = 범주(1~5), 회색 세로선 = 생성 모형의 경계모수 b1~b4
 # =============================================================================
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
@@ -78,10 +75,6 @@ crc <- function(alpha, s, c) {
   z <- outer(THETA, alpha * s) + matrix(c, length(THETA), 5, byrow = TRUE)
   z <- z - apply(z, 1, max); p <- exp(z); p / rowSums(p)
 }
-# 경계반응곡선: 행 θ, 열 경계 1~4
-brf <- function(alpha, s, c) {
-  sapply(1:4, function(k) plogis(alpha * (s[k + 1] - s[k]) * THETA + (c[k + 1] - c[k])))
-}
 curve_long <- function(mat, names, model) {
   colnames(mat) <- names
   data.frame(theta = THETA, mat, check.names = FALSE) %>%
@@ -97,15 +90,14 @@ make_num_factor <- function(x, fmt, decreasing = FALSE) {
   factor(sprintf(fmt, x), levels = sprintf(fmt, vals))
 }
 MODEL_LEVELS <- c("Generating model", "NRM estimate")
-BRF_COLOURS  <- c(b1 = "#4C9BE8", b2 = "#59A14F", b3 = "#F2A541", b4 = "#D1495B")
 CRC_COLOURS  <- c(`Cat 1` = "#4C9BE8", `Cat 2` = "#59A14F", `Cat 3` = "#F2A541",
                   `Cat 4` = "#D1495B", `Cat 5` = "#6A3D9A")
 
-curve_plot <- function(df, colours, ylab, title, path, half_line = FALSE) {
+curve_plot <- function(df, vlines, colours, ylab, title, path) {
   p <- ggplot(df, aes(x = theta, y = p, colour = curve, linetype = model,
-                      group = interaction(curve, model)))
-  if (half_line) p <- p + geom_hline(yintercept = 0.5, colour = "grey70", linewidth = 0.3)
-  p <- p + geom_line(linewidth = 0.6) +
+                      group = interaction(curve, model))) +
+    geom_vline(data = vlines, aes(xintercept = b), colour = "grey75", linewidth = 0.3) +
+    geom_line(linewidth = 0.6) +
     facet_grid(rows = vars(iv1), cols = vars(iv2),
                labeller = labeller(iv1 = function(x) paste0("s4=", x),
                                    iv2 = function(x) paste0("Int=", x))) +
@@ -150,25 +142,25 @@ run_set <- function(keep, label, desc) {
       ec <- c(r$c0, r$c1, r$c2, r$c3, r$c4)
       key <- r[, c("cond_code", "iv1_sf4", "iv2_b_interval", "iv3_b_mean")]
       bind_rows(
-        curve_long(brf(tp$alpha, tp$s, tp$c), paste0("b", 1:4), MODEL_LEVELS[1]) %>% mutate(type = "brf"),
-        curve_long(brf(r$alpha, es, ec),      paste0("b", 1:4), MODEL_LEVELS[2]) %>% mutate(type = "brf"),
-        curve_long(crc(tp$alpha, tp$s, tp$c), paste("Cat", 1:5), MODEL_LEVELS[1]) %>% mutate(type = "crc"),
-        curve_long(crc(r$alpha, es, ec),      paste("Cat", 1:5), MODEL_LEVELS[2]) %>% mutate(type = "crc")
+        curve_long(crc(tp$alpha, tp$s, tp$c), paste("Cat", 1:5), MODEL_LEVELS[1]),
+        curve_long(crc(r$alpha, es, ec),      paste("Cat", 1:5), MODEL_LEVELS[2])
       ) %>% cbind(key, .)
     })) %>%
       mutate(iv1 = make_num_factor(iv1_sf4,        "%.2f"),
              iv2 = make_num_factor(iv2_b_interval, "%.2f"),   # 좁음 → 넓음
-             model = factor(model, levels = MODEL_LEVELS))
+             model = factor(model, levels = MODEL_LEVELS),
+             curve = factor(curve, levels = names(CRC_COLOURS)))
+    vlines <- par_df %>%
+      select(iv1_sf4, iv2_b_interval, iv3_b_mean) %>%
+      tidyr::crossing(offset = B_OFFSET) %>%
+      mutate(b   = iv3_b_mean + iv2_b_interval * offset,
+             iv1 = make_num_factor(iv1_sf4,        "%.2f"),
+             iv2 = make_num_factor(iv2_b_interval, "%.2f"))
 
     for (m in sort(unique(curves$iv3_b_mean))) {
       sub <- curves %>% filter(iv3_b_mean == m)
       tag <- sprintf("%s_mean%.1f", stat, m)
-      curve_plot(sub %>% filter(type == "brf") %>% mutate(curve = factor(curve, levels = names(BRF_COLOURS))),
-                 BRF_COLOURS, "P(X = k | X in {k-1, k})",
-                 sprintf("Item 1 boundary response curves, b-mean = %.1f (NRM parameters: %s) - %s", m, stat, desc),
-                 out(sprintf("brf_%s.png", tag)), half_line = TRUE)
-      curve_plot(sub %>% filter(type == "crc") %>% mutate(curve = factor(curve, levels = names(CRC_COLOURS))),
-                 CRC_COLOURS, "P(X = k)",
+      curve_plot(sub, vlines %>% filter(iv3_b_mean == m), CRC_COLOURS, "P(X = k)",
                  sprintf("Item 1 category response curves, b-mean = %.1f (NRM parameters: %s) - %s", m, stat, desc),
                  out(sprintf("crc_%s.png", tag)))
     }
