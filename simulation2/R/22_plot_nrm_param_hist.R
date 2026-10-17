@@ -13,14 +13,17 @@
 #     (1) hist_overlay.png        — 한 패널에 IV3 4수준을 색으로 겹침 (선 히스토그램)
 #     (2) hist_mean<IV3>.png      — IV3 수준마다 1장 (막대 히스토그램)
 #
-# 급간: x축 범위를 N_BINS 칸으로 나눔 (N_BINS 가 작을수록 급간이 넓음)
-#   x축 범위는 PARAM_XLIM 에 지정한 값을 쓰고, NA 면 참값 범위 ± 4 × (조건별 IQR 의 중앙값) 으로 자동 설정
-#     (1) 겹친 그림: 모든 조건 공통 범위 (IV3 수준끼리 비교)
-#     (2) IV3 수준별 그림: 그 IV3 수준의 자료로 범위를 따로 정함 (절편처럼 참값이 IV3 에 따라 크게 움직이는 모수용)
-#   범위 밖 반복 수는 (2) 의 패널 글자에, (1) 기준 범위 밖 수는 param_dist_cond.csv 에 기록
+# x축과 급간: 같은 모수의 그림은 모두 같은 x축 범위와 같은 급간을 씀
+#   (반복 집합 3가지, 겹친 그림, IV3 수준별 그림 4장 모두 동일 — 제외 없는 전체 반복으로 한 번 정함)
+#   x축 범위: PARAM_XLIM 에 지정한 값, NA 면 참값 범위 ± 4 × (조건별 IQR 의 중앙값)
+#   급간    : PARAM_BINWIDTH 에 지정한 값, NA 면 (조건별 IQR 의 중앙값) / BINS_PER_IQR
+#             → 조건 하나의 분포 가운데 50% 를 약 BINS_PER_IQR 칸으로 나누는 폭
+#   범위 밖 반복 수는 (2) 의 패널 글자와 param_dist_cond.csv 에 기록
 #
-# 표시: 점선 = 참값, 빨간 실선 = 추정값의 중앙값
-#       b4 패널 글자에는 b̂4 < 0 비율과 Δs4 ≤ 0 비율도 표기
+# 표시 (IV3 수준별 그림): 검은 점선 = 참값, 빨간 실선 = 추정값 중앙값, 파란 점-선 = 추정값 평균
+#   평균이 x축 범위 밖이면 가장자리에 그리고 패널 글자에 평균값을 적음 (b4 처럼 극단값이 많은 모수)
+#   b4 패널 글자에는 b̂4 < 0 비율과 Δs4 ≤ 0 비율도 표기
+#   겹친 그림은 IV3 4수준의 참값(색 점선)만 표시
 #
 # 반복 집합 (16·18·21번과 같은 기준, 반복 단위 제외)
 #   all                — 아무것도 제외하지 않음 (수렴하고 b1~b4 가 계산된 반복)
@@ -37,9 +40,14 @@
 # ║                          사용자 설정 영역                                 ║
 # ╠══════════════════════════════════════════════════════════════════════════╣
 PARAMS     <- c("b4", "s1", "s2", "s3", "c1", "c2", "c3", "c4")   # 그릴 모수
-N_BINS     <- 25        # x축 범위를 나눌 칸 수 (작을수록 급간이 넓음)
+BINS_PER_IQR <- 3       # 급간 자동 설정: 조건별 IQR 중앙값을 몇 칸으로 나눌지 (작을수록 급간이 넓음)
 PARAM_XLIM <- list(     # 모수별 x축 범위, NA 면 자동
   b4 = c(-4, 8),
+  s1 = NA, s2 = NA, s3 = NA,
+  c1 = NA, c2 = NA, c3 = NA, c4 = NA
+)
+PARAM_BINWIDTH <- list( # 모수별 급간, NA 면 자동
+  b4 = 0.5,
   s1 = NA, s2 = NA, s3 = NA,
   c1 = NA, c2 = NA, c3 = NA, c4 = NA
 )
@@ -130,14 +138,15 @@ base_theme <- list(
 )
 IV3_COLOURS <- c("0.0" = "#4C9BE8", "0.5" = "#59A14F", "1.0" = "#F2A541", "1.5" = "#D1495B")
 
-# 모수별 x축 범위: 지정값 또는 참값 범위 ± 4 × (조건별 IQR 의 중앙값)
-param_xlim <- function(pp, d) {
-  if (!is.null(PARAM_XLIM[[pp]]) && !anyNA(PARAM_XLIM[[pp]])) return(PARAM_XLIM[[pp]])
-  iqr <- d %>% filter(is.finite(est)) %>% group_by(cond_code) %>%
-    summarise(i = IQR(est), .groups = "drop") %>% pull(i) %>% median()
-  r <- range(d$true)
-  c(r[1] - 4 * iqr, r[2] + 4 * iqr)
-}
+# 모수별 x축 범위와 급간: 제외 없는 전체 반복으로 한 번만 정해 모든 그림에 같이 씀
+AXIS <- lapply(setNames(PARAMS, PARAMS), function(pp) {
+  d   <- long %>% filter(param == pp, is.finite(est))
+  iqr <- d %>% group_by(cond_code) %>% summarise(i = IQR(est), .groups = "drop") %>% pull(i) %>% median()
+  r   <- range(d$true)
+  xl  <- if (!anyNA(PARAM_XLIM[[pp]])) PARAM_XLIM[[pp]] else c(r[1] - 4 * iqr, r[2] + 4 * iqr)
+  bw  <- if (!anyNA(PARAM_BINWIDTH[[pp]])) PARAM_BINWIDTH[[pp]] else iqr / BINS_PER_IQR
+  list(xlim = xl, bw = bw)
+})
 
 # =============================================================================
 # 3. 반복 집합 × 모수별 표와 그래프
@@ -150,8 +159,8 @@ for (st in names(SETS)) {
   dist_all <- list()
   for (pp in PARAMS) {
     d    <- ds %>% filter(param == pp)
-    xlim <- param_xlim(pp, d)
-    bw   <- diff(xlim) / N_BINS
+    xlim <- AXIS[[pp]]$xlim
+    bw   <- AXIS[[pp]]$bw
     out  <- function(f) file.path(set_dir, pp, f)
     dir.create(file.path(set_dir, pp), recursive = TRUE, showWarnings = FALSE)
 
@@ -191,32 +200,34 @@ for (st in names(SETS)) {
 
     # ── (2) IV3 수준마다 1장 ──
     for (m in sort(unique(d$iv3_b_mean))) {
-      dm   <- d %>% filter(iv3_b_mean == m)
-      xl_m <- param_xlim(pp, dm)                # IV3 수준별 범위 (지정값이 있으면 그 값)
-      bw_m <- diff(xl_m) / N_BINS
-      h  <- dm %>% filter(est >= xl_m[1], est <= xl_m[2])
-      vl <- lines %>% filter(iv3_b_mean == m) %>%
-        left_join(dm %>% group_by(cond_code) %>%
-                    summarise(n_out_m = sum(est < xl_m[1] | est > xl_m[2]), .groups = "drop"),
-                  by = "cond_code")
-      vl_long <- bind_rows(vl %>% transmute(iv1, iv2, value = true, what = "True value"),
-                           vl %>% transmute(iv1, iv2, value = pmin(pmax(median_est, xl_m[1]), xl_m[2]),
-                                            what = "Median of estimates"))
-      lab <- vl %>% mutate(label = if (pp == "b4")
-        sprintf("n=%d, outside: %d\nb4<0: %.0f%%, ds4<=0: %.0f%%",
-                n, n_out_m, 100 * share_negative, 100 * share_ds4_le0) else
-        sprintf("n=%d, outside: %d\nbelow true: %.0f%%", n, n_out_m, 100 * share_below_true))
+      h  <- inside %>% filter(iv3_b_mean == m)
+      vl <- lines %>% filter(iv3_b_mean == m)
+      clamp <- function(x) pmin(pmax(x, xlim[1]), xlim[2])
+      vl_long <- bind_rows(vl %>% transmute(iv1, iv2, value = true,              what = "True value"),
+                           vl %>% transmute(iv1, iv2, value = clamp(median_est), what = "Median of estimates"),
+                           vl %>% transmute(iv1, iv2, value = clamp(mean_est),   what = "Mean of estimates")) %>%
+        mutate(what = factor(what, levels = c("True value", "Median of estimates", "Mean of estimates")))
+      lab <- vl %>% mutate(
+        mean_txt = ifelse(mean_est < xlim[1] | mean_est > xlim[2],
+                          sprintf("mean %.2f (off-scale)", mean_est), sprintf("mean %.2f", mean_est)),
+        label = if (pp == "b4")
+          sprintf("n=%d, outside: %d\n%s, median %.2f\nb4<0: %.0f%%, ds4<=0: %.0f%%",
+                  n, n_outside_xlim, mean_txt, median_est, 100 * share_negative, 100 * share_ds4_le0) else
+          sprintf("n=%d, outside: %d\n%s, median %.2f\nbelow true: %.0f%%",
+                  n, n_outside_xlim, mean_txt, median_est, 100 * share_below_true))
       p_h <- ggplot(h, aes(x = est)) +
-        geom_histogram(binwidth = bw_m, boundary = xl_m[1], fill = "grey70", colour = "grey40", linewidth = 0.2) +
+        geom_histogram(binwidth = bw, boundary = xlim[1], fill = "grey70", colour = "grey40", linewidth = 0.2) +
         geom_vline(data = vl_long, aes(xintercept = value, colour = what, linetype = what), linewidth = 0.6) +
-        geom_text(data = lab, aes(x = xl_m[1], y = Inf, label = label),
+        geom_text(data = lab, aes(x = xlim[1], y = Inf, label = label),
                   hjust = 0, vjust = 1.2, size = 2.2, lineheight = 0.9, inherit.aes = FALSE) +
         grid_facet +
-        scale_colour_manual(values = c("True value" = "black", "Median of estimates" = "firebrick"), name = NULL) +
-        scale_linetype_manual(values = c("True value" = "dashed", "Median of estimates" = "solid"), name = NULL) +
-        coord_cartesian(xlim = xl_m) +
+        scale_colour_manual(values = c("True value" = "black", "Median of estimates" = "firebrick",
+                                       "Mean of estimates" = "#2C6FB7"), name = NULL) +
+        scale_linetype_manual(values = c("True value" = "dashed", "Median of estimates" = "solid",
+                                         "Mean of estimates" = "dotdash"), name = NULL) +
+        coord_cartesian(xlim = xlim) +
         labs(title = sprintf("Item 1 NRM %s, b-mean (IV3) = %.1f - %s", PARAM_TITLE[[pp]], m, SET_DESC[[st]]),
-             x = sprintf("%s estimate (bin width %.2f)", pp, bw_m), y = "Count") +
+             x = sprintf("%s estimate (bin width %.2f)", pp, bw), y = "Count") +
         base_theme
       ggsave(out(sprintf("hist_mean%.1f.png", m)), p_h, width = 24, height = 18, dpi = 150)
     }
