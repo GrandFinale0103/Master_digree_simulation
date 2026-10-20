@@ -8,6 +8,27 @@ if (!file.exists("R_graph/00_config.R"))
   stop("작업 디렉토리를 simulation1/ 로 맞춘 뒤 실행하세요. 현재: ", getwd())
 source("R_graph/00_config.R", encoding = "UTF-8")
 
+# ── 00_config.R 에 없는 설정은 기본값으로 채움 (예전 00_config.R 을 그대로 써도 동작) ──
+.cfg_default <- list(FIG11_POINT_ALPHA = 0.25, OUTLIER_UNIT = "rep", DAK_CUT = 0.1,
+                     FIG14_SHOW_CURVE = TRUE, SAVE_PDF = FALSE)
+for (.nm in names(.cfg_default))
+  if (!exists(.nm, inherits = TRUE)) assign(.nm, .cfg_default[[.nm]])
+.lab_default <- list(
+  sf = "채점함수 간격", interval = "경계모수 간격", mean = "문항 난이도",
+  theta = "\u03b8", prob = "P(\u03b8)", category = "범주",
+  trans = "전치 비율", trans_diff = "전치 비율 차이(NRM \u2212 GPCM)",
+  pair = "전치된 경계모수 쌍", trans_any = "전체 전치 비율",
+  bias = "Bias", rmse = "RMSE", density = "밀도", estimate = "경계모수 추정값",
+  sf_value = "채점함수 값", true_model = "참 모형", gpcm = "GPCM 추정", gpcm_fig11 = "GPCM",
+  nrm = "NRM 추정", kl_bias = "KL 극한으로 계산한 Bias", sim_bias = "시뮬레이션 Bias",
+  cause = "전치 원인", sf_order = "추정된 채점함수")
+LAB <- modifyList(.lab_default, if (exists("LAB")) LAB else list())
+# 예전 00_config.R 의 기본 라벨은 새 표기로 바꿈 (직접 다른 값으로 바꾼 라벨은 그대로)
+.lab_old <- list(theta = "능력모수(\u03b8)", prob = "응답 확률", bias = "편향",
+                 kl_bias = "KL 극한으로 계산한 편향", sim_bias = "시뮬레이션 편향")
+for (.nm in names(.lab_old))
+  if (identical(LAB[[.nm]], .lab_old[[.nm]])) LAB[[.nm]] <- .lab_default[[.nm]]
+
 # ── 패키지 ──────────────────────────────────────────────────────────────────
 for (pkg in c("dplyr", "tidyr", "ggplot2", "scales", "ragg", "car")) {
   if (!requireNamespace(pkg, quietly = TRUE))
