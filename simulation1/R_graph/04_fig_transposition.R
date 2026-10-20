@@ -6,7 +6,7 @@
 # 분모 = 수렴하고 b1~b4 가 모두 계산된 반복
 #
 # 배치 (모두 같음): 9개 패널 막대 그래프
-#   행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 난이도
+#   행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 심각도
 # y축: 그림 7·8·12·15 와 예비 NRM 쌍별 그림이 모두 같음 (trans_ylim)
 #
 #   fig07_sim1_transposition         그림 7   GPCM 전치 비율
@@ -71,7 +71,7 @@ if (has2) save_fig(plot_pairs(sum2), "extra_sim2_transposition_pairs", W9, H9 + 
 # ── 표 ──────────────────────────────────────────────────────────────────────
 tab_cond <- function(s, model) {
   s %>% transmute(`모형` = model, `채점함수 간격` = f_sf, `경계모수 간격` = f_int,
-                  `문항 난이도` = f_mean, `반복 수` = n,
+                  `문항 심각도` = f_mean, `반복 수` = n,
                   `전치 비율(%)` = round(100 * prop_any, 1),
                   `b1·b2 전치(%)` = round(100 * prop_12, 1),
                   `b2·b3 전치(%)` = round(100 * prop_23, 1),

@@ -9,7 +9,7 @@
 #   fig04_scoring_function     그림 4   채점함수 간격 (수직선)
 #   fig05_crc_scoring_function 그림 5   채점함수 간격에 따른 범주반응곡선
 #   fig05b_crc_interval        그림 5b  경계모수 간격에 따른 범주반응곡선 (시뮬레이션1 수준)
-#   fig05c_crc_mean            그림 5c  문항 난이도에 따른 범주반응곡선   (시뮬레이션1 수준)
+#   fig05c_crc_mean            그림 5c  문항 심각도에 따른 범주반응곡선   (시뮬레이션1 수준)
 #   그림 5·5b·5c 는 같은 크기·축, 바꾸지 않는 독립변수는 FIG05_FIXED 값으로 고정
 # =============================================================================
 
@@ -125,8 +125,8 @@ p5 <- ggplot(d5, aes(theta, prob)) +
   facet_wrap(~f_sf, nrow = 1, labeller = as_labeller(lab_sf))
 save_fig(p5, "fig05_crc_scoring_function", 16, 6.5)
 
-# ── 그림 5b·5c: 경계모수 간격·문항 난이도에 따른 범주반응곡선 ──────────────────
-# 바꾸는 변인 외에는 FIG05_FIXED 로 고정 (기본: 채점함수 등간격, 간격 1.0, 난이도 0)
+# ── 그림 5b·5c: 경계모수 간격·문항 심각도에 따른 범주반응곡선 ──────────────────
+# 바꾸는 변인 외에는 FIG05_FIXED 로 고정 (기본: 채점함수 등간격, 간격 1.0, 심각도 0)
 sf_fixed <- c(0, 1, 2, FIG05_FIXED[["sf4"]], 4)
 
 d5b <- bind_rows(lapply(sort(SIM1_IV2), function(d)

@@ -97,7 +97,7 @@ p15 <- plot_stack(cause_long, "cause", cause_cols, cause_labels, LAB$cause, ylim
   guides(fill = guide_legend(nrow = 2, byrow = TRUE))
 save_fig(p15, "fig15_nrm_cause", 15, 14)
 
-save_table(cause %>% transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 난이도` = f_mean,
+save_table(cause %>% transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 심각도` = f_mean,
                                `반복 수` = n,
                                `전체 전치(%)` = round(100 * (both + extreme + sf + none), 1),
                                `극단 오차 + 채점함수 이상(%)` = round(100 * both, 1),

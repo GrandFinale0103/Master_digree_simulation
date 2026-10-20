@@ -154,7 +154,7 @@ if (length(files2) == 0) {
   if (length(tp_files) == 0) {
     lg(sprintf("  [주의] %s 가 없어 조건 코드를 확인하지 못함 — 아래 대응표를 직접 확인하세요", tp_dir))
     for (i in seq_len(nrow(grid)))
-      lg(sprintf("         s4 = %.2f, 간격 = %.2f, 난이도 = %.1f  →  cond%s",
+      lg(sprintf("         s4 = %.2f, 간격 = %.2f, 심각도 = %.1f  →  cond%s",
                  grid$sf4[i], grid$interval2[i], grid$mean[i], grid$code2[i]))
   } else {
     tp_code <- sub(".*_cond([0-9]+)_.*", "\\1", basename(tp_files))

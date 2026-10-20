@@ -186,7 +186,7 @@ p_kl <- ggplot(kl, aes(kl_bias, sim_bias, colour = param, shape = param)) +
   theme_thesis()
 save_fig(p_kl, "extra_kl_vs_sim_bias", 10, 10)
 
-save_table(kl %>% transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 난이도` = f_mean,
+save_table(kl %>% transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 심각도` = f_mean,
                             `경계모수` = param, `참값` = round(true, 3), `KL 극한` = round(limit, 3),
                             `추정 평균` = round(sim_mean, 3), `KL 극한 Bias` = round(kl_bias, 3),
                             `시뮬레이션 Bias` = round(sim_bias, 3)),

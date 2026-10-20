@@ -6,7 +6,7 @@
 # 시뮬레이션2(NRM)는 이상치 제거 후 계산
 #   이상치: |b̂ − b| ≥ ERR_CUT (00_config.R), OUTLIER_UNIT 에 따라 반복 전체 또는 해당 값만 제거
 #
-# 배치 (모든 그림 같음): 행 = 경계모수, 열 = 채점함수 간격, x = 문항 난이도, 색 = 경계모수 간격
+# 배치 (모든 그림 같음): 행 = 경계모수, 열 = 채점함수 간격, x = 문항 심각도, 색 = 경계모수 간격
 # y축: Bias 그림끼리, RMSE 그림끼리 모든 패널이 같음 (시뮬레이션1·2 포함)
 #   *_b3b4 : b3, b4 만 (발표용)        *_b1b4 : b1~b4 (부록용)
 #
@@ -74,7 +74,7 @@ save_table(anova_type3(reps1, "err_b4"), "tab_sim1_bias_anova_b4")
 # ── 표: 조건별 Bias·RMSE ────────────────────────────────────────────────────
 tab_err <- function(e, model) {
   e %>% transmute(`모형` = model, `경계모수` = param, `채점함수 간격` = f_sf,
-                  `경계모수 간격` = f_int, `문항 난이도` = f_mean, `반복 수` = n,
+                  `경계모수 간격` = f_int, `문항 심각도` = f_mean, `반복 수` = n,
                   Bias = round(bias, 3), RMSE = round(rmse, 3))
 }
 save_table(bind_rows(tab_err(err1, "GPCM"),
@@ -91,7 +91,7 @@ if (has2) {
   out_tab <- bind_rows(
     out_tab %>% mutate(across(c(f_sf, f_int, f_mean), as.character)),
     data.frame(f_sf = "전체", f_int = "", f_mean = "", n = sum(out_tab$n), n_out = sum(out_tab$n_out))) %>%
-    transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 난이도` = f_mean,
+    transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 심각도` = f_mean,
               `분석 반복 수` = n, `제거 반복 수` = n_out,
               `제거 비율(%)` = round(100 * n_out / n, 1))
   save_table(out_tab, "tab_sim2_outliers")

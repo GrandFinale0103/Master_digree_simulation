@@ -16,7 +16,7 @@ source("R_graph/00_config.R", encoding = "UTF-8")
 for (.nm in names(.cfg_default))
   if (!exists(.nm, inherits = TRUE)) assign(.nm, .cfg_default[[.nm]])
 .lab_default <- list(
-  sf = "채점함수 간격", interval = "경계모수 간격", mean = "문항 난이도",
+  sf = "채점함수 간격", interval = "경계모수 간격", mean = "문항 심각도",
   theta = "\u03b8", prob = "P(\u03b8)", category = "범주",
   trans = "전치 비율", trans_diff = "전치 비율 차이(NRM \u2212 GPCM)",
   pair = "전치된 경계모수 쌍", trans_any = "전체 전치 비율",
@@ -26,7 +26,8 @@ for (.nm in names(.cfg_default))
   cause = "전치 원인", sf_order = "추정된 채점함수")
 LAB <- modifyList(.lab_default, if (exists("LAB")) LAB else list())
 # 예전 00_config.R 의 기본 라벨은 새 표기로 바꿈 (직접 다른 값으로 바꾼 라벨은 그대로)
-.lab_old <- list(theta = "능력모수(\u03b8)", prob = "응답 확률", bias = "편향",
+#   문항 난이도 → 문항 심각도, 능력모수(θ) → θ, 응답 확률 → P(θ), 편향 → Bias
+.lab_old <- list(mean = "문항 난이도", theta = "능력모수(\u03b8)", prob = "응답 확률", bias = "편향",
                  kl_bias = "KL 극한으로 계산한 편향", sim_bias = "시뮬레이션 편향")
 for (.nm in names(.lab_old))
   if (identical(LAB[[.nm]], .lab_old[[.nm]])) LAB[[.nm]] <- .lab_default[[.nm]]
@@ -270,7 +271,7 @@ facet9 <- function() {
 pct_labels <- scales::label_percent(accuracy = 1)
 
 # ── 공통 그래프 1: 조건별 선 그래프 (편향·RMSE) ─────────────────────────────
-#   x = 문항 난이도, 색·모양·선 = 경계모수 간격, 열 = 채점함수 간격, (행 = rows 변수)
+#   x = 문항 심각도, 색·모양·선 = 경계모수 간격, 열 = 채점함수 간격, (행 = rows 변수)
 #   ylim: 모든 패널이 같은 y축 (비교할 그림끼리 같은 ylim 을 넘김)
 plot_lines <- function(df, y, ylab, ylim, rows = NULL, hline = NULL,
                        y_labels = waiver(), row_labeller = label_parsed) {
@@ -297,7 +298,7 @@ plot_lines <- function(df, y, ylab, ylim, rows = NULL, hline = NULL,
 }
 
 # ── 공통 그래프 2: 9개 패널 막대 (전치 비율) ────────────────────────────────
-#   행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 난이도
+#   행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 심각도
 #   fill_by_sign = TRUE 면 양수·음수 막대 색을 다르게 (차이 그래프)
 plot_bars <- function(df, y, ylab, ylim, y_labels = pct_labels, fill_by_sign = FALSE) {
   p <- ggplot(df, aes(f_mean, .data[[y]]))
@@ -337,7 +338,7 @@ plot_stack <- function(df, fill, values, labels, legend_title, ylim,
           legend.key.height = unit(1.6, "lines"))
 }
 
-# ── 로지스틱 회귀 우도비 검정 표 (전치 여부 ~ 채점함수 × 경계모수 간격 × 난이도) ──
+# ── 로지스틱 회귀 우도비 검정 표 (전치 여부 ~ 채점함수 × 경계모수 간격 × 심각도) ──
 transposition_lrt <- function(reps) {
   d   <- reps %>% mutate(y = as.numeric(transposed))
   fit <- suppressWarnings(glm(y ~ f_sf * f_int * f_mean, data = d, family = binomial("logit")))
@@ -352,7 +353,7 @@ transposition_lrt <- function(reps) {
              check.names = FALSE)
 }
 
-# ── Type III 분산분석 표 (오차 ~ 채점함수 × 경계모수 간격 × 난이도) ──────────
+# ── Type III 분산분석 표 (오차 ~ 채점함수 × 경계모수 간격 × 심각도) ──────────
 anova_type3 <- function(reps, dv) {
   d   <- reps %>% mutate(.dv = .data[[dv]]) %>% filter(is.finite(.dv))
   fit <- lm(.dv ~ f_sf * f_int * f_mean, data = d,
