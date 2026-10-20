@@ -118,7 +118,18 @@ code_f2 <- sub(".*_cond([0-9]+)_.*", "\\1", basename(files2))
 files2  <- dedupe_files(files2[code_f2 %in% grid$code2])
 
 if (length(files2) == 0) {
-  lg(sprintf("  [경고] 시뮬레이션2 NRM 결과가 없습니다: %s", normalizePath(nrm_dir, mustWork = FALSE)))
+  n_all <- length(code_f2)
+  if (!dir.exists(nrm_dir)) {
+    lg(sprintf("  [경고] 시뮬레이션2 NRM 결과 폴더가 없습니다: %s", normalizePath(nrm_dir, mustWork = FALSE)))
+  } else if (n_all == 0) {
+    lg(sprintf("  [경고] 폴더는 있지만 *_nrm.csv 파일이 없습니다: %s", normalizePath(nrm_dir)))
+  } else {
+    lg(sprintf("  [경고] *_nrm.csv 파일 %d개가 있지만 가져올 27개 조건과 맞는 조건 코드가 없습니다", n_all))
+    lg(sprintf("         폴더에 있는 조건 코드 (앞 10개): %s",
+               paste(head(sort(unique(code_f2)), 10), collapse = ", ")))
+    lg(sprintf("         찾으려던 조건 코드 (앞 10개): %s", paste(head(sort(grid$code2), 10), collapse = ", ")))
+    lg("         → 00_config.R 의 SIM2_IV1·SIM2_IV2·SIM2_IV3 를 시뮬레이션2 R/00_setup.R 의 수준 목록과 같게 맞추세요")
+  }
   lg("         NRM 그래프(04·05·07·08번 일부)는 건너뜀")
   sim2 <- NULL
 } else {
@@ -136,6 +147,36 @@ if (length(files2) == 0) {
     for (nm in intersect(nrm_cols, names(df))) row[[nm]] <- suppressWarnings(as.numeric(df[[nm]][1]))
     row
   }
+  # 조건 코드가 실제로 그 조건인지 시뮬레이션2 true_params 로 확인
+  #   (수준 목록이 다르면 다른 조건의 코드와 우연히 맞을 수 있음)
+  tp_dir   <- file.path(SIM2_OUTPUT, "true_params")
+  tp_files <- list.files(tp_dir, pattern = "_item_params\\.csv$", full.names = TRUE)
+  if (length(tp_files) == 0) {
+    lg(sprintf("  [주의] %s 가 없어 조건 코드를 확인하지 못함 — 아래 대응표를 직접 확인하세요", tp_dir))
+    for (i in seq_len(nrow(grid)))
+      lg(sprintf("         s4 = %.2f, 간격 = %.2f, 난이도 = %.1f  →  cond%s",
+                 grid$sf4[i], grid$interval2[i], grid$mean[i], grid$code2[i]))
+  } else {
+    tp_code <- sub(".*_cond([0-9]+)_.*", "\\1", basename(tp_files))
+    bad <- character(0)
+    for (i in seq_len(nrow(grid))) {
+      f <- tp_files[tp_code == grid$code2[i]]
+      if (length(f) == 0) next
+      it <- read_one(f[1])[1, ]
+      exp_b <- grid$mean[i] + grid$interval2[i] * B_OFFSET
+      ok <- abs(it$sf4 - grid$sf4[i]) < 1e-6 &&
+            all(abs(unlist(it[paste0("b", 1:4)]) - exp_b) < 1e-6)
+      if (!ok) bad <- c(bad, sprintf("cond%s: 기대 s4 = %g, b = (%s) / 파일 s4 = %g, b = (%s)",
+                                     grid$code2[i], grid$sf4[i], paste(exp_b, collapse = ", "),
+                                     it$sf4, paste(round(unlist(it[paste0("b", 1:4)]), 3), collapse = ", ")))
+    }
+    if (length(bad))
+      stop("시뮬레이션2 조건 코드와 실제 조건이 다릅니다. 00_config.R 의 SIM2_IV1·SIM2_IV2·SIM2_IV3 를\n",
+           "시뮬레이션2 R/00_setup.R 의 수준 목록과 같게(순서까지) 맞추세요.\n  ",
+           paste(head(bad, 5), collapse = "\n  "))
+    lg("  조건 코드 확인 완료 (true_params 의 채점함수·경계모수와 일치)")
+  }
+
   sim2 <- read_files(files2, read_nrm) %>%
     left_join(grid %>% select(cond_code2 = code2, cond_code = code1, sf4, interval,
                               interval_true = interval2, mean), by = "cond_code2")
