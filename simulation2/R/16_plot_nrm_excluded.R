@@ -1,21 +1,15 @@
 # =============================================================================
 # 16_plot_nrm_excluded.R  (simulation2, NRM 추정 결과)
-# 극단 오차 / 채점함수 이상(전치·분모 붕괴) / 경계모수 전치 반복을 제외한 뒤
-# 전치 비율, Bias, RMSE 재계산·시각화
+# 극단 오차 / 채점함수 이상(전치·분모 붕괴) 반복을 제외한 뒤 전치 비율, Bias, RMSE 재계산·시각화
 #
 # 제외는 반복 단위 (전치 비율과 Bias/RMSE가 같은 반복 집합에서 계산되도록)
 #   극단 오차      : b1~b4 중 하나라도 |b̂_k − b_k| ≥ ERR_CUT
 #   채점함수 이상  : Δak_k = ak_k − ak_{k−1} 이 ≤ 0 (전치) 또는 |Δak_k| < DAK_CUT (분모 붕괴)
 #                    인 k 가 하나라도 있음 (k = 1..4)
-#   경계모수 전치  : 인접 경계모수 쌍 중 하나라도 b̂_k ≥ b̂_{k+1}
 #
 # 시나리오
 #   excl_extreme        — 1) 극단 오차 반복 제외
 #   excl_extreme_sfrev  — 2) 극단 오차 반복 + 채점함수 이상(전치·분모 붕괴) 반복 제외
-#   excl_extreme_trans  — 3) 극단 오차 반복 + 경계모수 전치 반복 제외
-#   excl_extreme_sfrev_trans — 4) 극단 오차 + 채점함수 이상 + 경계모수 전치 반복 모두 제외
-#   ※ 3)·4) 는 전치된 반복을 빼므로 남은 반복의 전치 비율이 0 → 전치 비율 그래프는 만들지 않음
-#     (대신 summary_cond.csv 의 prop_transposed 는 0, 제외 비율 그래프에 전치 몫이 표시됨)
 #
 # 전치 비율 집계 (12·14·15번 NRM 전치 그래프와 같은 기준)
 #   전치 = 인접 경계모수 쌍 중 하나라도 b_k ≥ b_{k+1}
@@ -31,11 +25,7 @@
 #   transposition_plot.png     — 전치 비율 (행 IV1, 열 IV2 좁음→넓음, x축 IV3)
 #   rmse_bias_plot_b_bias.png  — b1~b4 Bias (12번 NRM 그래프와 같은 배치)
 #   rmse_bias_plot_b_rmse.png  — b1~b4 RMSE
-#   exclusion_rate_plot.png    — 조건별 제외 비율 (제외 이유 조합별 누적 막대, 전치 그래프 배치)
-# 시나리오 비교: output/nrm/excluded/compare/
-#   rmse_bias_compare.csv      — 조건 × 경계모수 × 반복 집합(제외 없음 all + 시나리오 4개)의 n, Bias, RMSE
-#   rmse_compare_b{k}.png      — 경계모수별 RMSE 를 반복 집합끼리 비교 (행 IV1, 열 IV2 좁음→넓음, x축 IV3)
-#   bias_compare_b{k}.png      — 같은 배치의 Bias 비교
+#   exclusion_rate_plot.png    — 조건별 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치)
 # =============================================================================
 
 ERR_CUT <- 3     # 극단 오차: |오차| ≥ ERR_CUT
@@ -74,10 +64,7 @@ rep_df <- read.csv(in_path, stringsAsFactors = FALSE,
 
 n_all <- rep_df %>% count(cond_code, name = "n_converged")
 
-# flags: 제외 이유별 논리 벡터 목록 (예: list("Extreme error" = is_extreme, ...)) — 하나라도 TRUE 면 제외
-run_scenario <- function(flags, label, desc) {
-  keep    <- !Reduce(`|`, flags)
-  trans_excluded <- "Transposed b" %in% names(flags)
+run_scenario <- function(keep, label, desc) {
   out_dir <- file.path("output/nrm/excluded", label)
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
   out <- function(f) file.path(out_dir, f)
@@ -107,8 +94,7 @@ run_scenario <- function(flags, label, desc) {
               by = "cond_code")
   write.csv(summary_cond, out("summary_cond.csv"), row.names = FALSE)
 
-  # ── 전치 비율 (기존 NRM 전치 그래프 배치) — 전치 반복을 제외한 시나리오는 항상 0 이라 생략 ──
-  if (!trans_excluded) {
+  # ── 전치 비율 (기존 NRM 전치 그래프 배치) ──
   p_t <- trans_cond %>%
     mutate(iv1 = make_num_factor(iv1_sf4, "%.2f"),
            iv2 = make_num_factor(iv2_b_interval, "%.2f", decreasing = FALSE),
@@ -125,7 +111,6 @@ run_scenario <- function(flags, label, desc) {
     theme(strip.text = element_text(size = 7), axis.text = element_text(size = 7),
           axis.text.x = element_text(angle = 45, hjust = 1))
   ggsave(out("transposition_plot.png"), p_t, width = 24, height = 18, dpi = 150)
-  }
 
   # ── Bias / RMSE (12번 NRM 그래프와 같은 배치) ──
   b_params <- c("b1", "b2", "b3", "b4")
@@ -160,20 +145,16 @@ run_scenario <- function(flags, label, desc) {
   ggsave(out("rmse_bias_plot_b_rmse.png"), p_rmse,
          width = 42, height = 12, dpi = 150, limitsize = FALSE)
 
-  # ── 제외 비율 (제외 이유 조합별 누적 막대, 전치 그래프 배치) ──
-  flag_mat <- do.call(cbind, flags)
-  reason_of <- apply(flag_mat, 1, function(r) {
-    hit <- names(flags)[r]
-    if (length(hit) == 0) NA_character_ else paste(hit, collapse = " + ")
-  })
-  # 조합 순서: 이유 수가 많은 조합 → 적은 조합 (가능한 조합 전부, 범례가 시나리오마다 일관되게)
-  combos <- unlist(lapply(rev(seq_along(flags)), function(m)
-    apply(combn(names(flags), m), 2, paste, collapse = " + ")))
-  EX_LEVELS  <- combos
-  ex_colours <- setNames(c("#6A3D9A", "#D1495B", "#F2A541", "#2a9d8f",
-                           "#4C9BE8", "#8c564b", "#7f7f7f")[seq_along(EX_LEVELS)], EX_LEVELS)
+  # ── 제외 비율 (제외 이유별 누적 막대, 전치 그래프 배치) ──
+  EX_LEVELS  <- c("Both (extreme + SF reversal/near-zero dak)", "Extreme error only",
+                  "SF reversal/near-zero dak only")
+  ex_colours <- setNames(c("#6A3D9A", "#D1495B", "#F2A541"), EX_LEVELS)
   ex_cond <- rep_df %>%
-    mutate(excluded = !keep, reason = reason_of) %>%
+    mutate(excluded = !keep,
+           reason = case_when(!excluded              ~ NA_character_,
+                              is_extreme & is_sfrev  ~ EX_LEVELS[1],
+                              is_extreme             ~ EX_LEVELS[2],
+                              TRUE                   ~ EX_LEVELS[3])) %>%
     group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean) %>%
     mutate(n_converged = n()) %>%
     filter(excluded) %>%
@@ -206,76 +187,10 @@ run_scenario <- function(flags, label, desc) {
 
   message(sprintf("[%s] 남은 반복 %d / %d (제외 %.1f%%) → %s/",
                   label, sum(keep), length(keep), 100 * mean(!keep), out_dir))
-  invisible(err_cond %>% left_join(kept %>% count(cond_code, name = "n"), by = "cond_code") %>%
-              mutate(set = label))
 }
 
-F_EXT   <- list("Extreme error" = rep_df$is_extreme)
-F_SF    <- list("SF reversal/near-zero dak" = rep_df$is_sfrev)
-F_TRANS <- list("Transposed b" = rep_df$transposed)
-
-res <- list(
-  run_scenario(F_EXT, "excl_extreme",
-               sprintf("Excluding extreme errors (|error| >= %g)", ERR_CUT)),
-  run_scenario(c(F_EXT, F_SF), "excl_extreme_sfrev",
-               sprintf("Excluding extreme errors (|error| >= %g) and scoring-function reversals / near-zero dak (|dak| < %g)",
-                       ERR_CUT, DAK_CUT)),
-  run_scenario(c(F_EXT, F_TRANS), "excl_extreme_trans",
-               sprintf("Excluding extreme errors (|error| >= %g) and transposed boundaries (any adjacent pair)", ERR_CUT)),
-  run_scenario(c(F_EXT, F_SF, F_TRANS), "excl_extreme_sfrev_trans",
-               sprintf("Excluding extreme errors (|error| >= %g), scoring-function reversals / near-zero dak (|dak| < %g) and transposed boundaries",
-                       ERR_CUT, DAK_CUT))
-)
-
-# =============================================================================
-# 시나리오 비교: 제외 없음(all) + 시나리오 4개의 Bias / RMSE
-# =============================================================================
-CMP_DIR <- "output/nrm/excluded/compare"
-dir.create(CMP_DIR, recursive = TRUE, showWarnings = FALSE)
-SET_LEVELS <- c("all", "excl_extreme", "excl_extreme_sfrev", "excl_extreme_trans", "excl_extreme_sfrev_trans")
-SET_LABELS <- c("all (no exclusion)", "extreme", "extreme + SF", "extreme + transposed",
-                "extreme + SF + transposed")
-
-all_set <- rep_df %>%
-  select(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, err_b1:err_b4) %>%
-  pivot_longer(err_b1:err_b4, names_to = "param", names_prefix = "err_", values_to = "err") %>%
-  group_by(cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, param) %>%
-  summarise(n = n(), bias = mean(err), rmse = sqrt(mean(err^2)), .groups = "drop") %>%
-  mutate(set = "all")
-
-cmp <- bind_rows(all_set, res) %>%
-  left_join(n_all, by = "cond_code") %>%
-  mutate(prop_kept = n / n_converged,
-         set = factor(set, levels = SET_LEVELS)) %>%
-  select(set, cond_code, iv1_sf4, iv2_b_interval, iv3_b_mean, param,
-         n, n_converged, prop_kept, bias, rmse) %>%
-  arrange(param, cond_code, set)
-write.csv(cmp, file.path(CMP_DIR, "rmse_bias_compare.csv"), row.names = FALSE)
-
-set_colours <- setNames(c("grey35", "#D1495B", "#F2A541", "#2a9d8f", "#4C9BE8"), SET_LABELS)
-cmp_plot <- cmp %>%
-  mutate(set = factor(SET_LABELS[as.integer(set)], levels = SET_LABELS),
-         iv1 = make_num_factor(iv1_sf4, "%.2f"),
-         iv2 = make_num_factor(iv2_b_interval, "%.2f", decreasing = FALSE))
-for (k in c("b1", "b2", "b3", "b4")) {
-  d <- cmp_plot %>% filter(param == k)
-  for (what in c("rmse", "bias")) {
-    p <- ggplot(d, aes(x = iv3_b_mean, y = .data[[what]], colour = set)) +
-      { if (what == "bias") geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50", linewidth = 0.4) } +
-      geom_line(linewidth = 0.5) + geom_point(size = 1.1) +
-      facet_grid(rows = vars(iv1), cols = vars(iv2),
-                 labeller = labeller(iv1 = function(x) paste0("s4=", x),
-                                     iv2 = function(x) paste0("Int=", x))) +
-      scale_colour_manual(values = set_colours, name = "Replications") +
-      scale_x_continuous(breaks = sort(unique(cmp$iv3_b_mean))) +
-      labs(title = sprintf("NRM item 1 %s: %s by exclusion rule", k, toupper(what)),
-           x = "b-parameter Mean (IV3)", y = sprintf("%s (NRM)", toupper(what))) +
-      theme_bw(base_size = 9) +
-      theme(legend.position = "bottom",
-            strip.text = element_text(size = 7), axis.text = element_text(size = 7),
-            axis.text.x = element_text(angle = 45, hjust = 1))
-    ggsave(file.path(CMP_DIR, sprintf("%s_compare_%s.png", what, k)), p,
-           width = 24, height = 18, dpi = 150)
-  }
-}
-message(sprintf("시나리오 비교 → %s/", CMP_DIR))
+run_scenario(!rep_df$is_extreme, "excl_extreme",
+             sprintf("Excluding extreme errors (|error| >= %g)", ERR_CUT))
+run_scenario(!rep_df$is_extreme & !rep_df$is_sfrev, "excl_extreme_sfrev",
+             sprintf("Excluding extreme errors (|error| >= %g) and scoring-function reversals / near-zero dak (|dak| < %g)",
+                     ERR_CUT, DAK_CUT))
