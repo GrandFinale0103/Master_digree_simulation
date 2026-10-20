@@ -9,7 +9,8 @@ if (!file.exists("R_graph/00_config.R"))
 source("R_graph/00_config.R", encoding = "UTF-8")
 
 # ── 00_config.R 에 없는 설정은 기본값으로 채움 (예전 00_config.R 을 그대로 써도 동작) ──
-.cfg_default <- list(FIG05_FIXED = c(sf4 = 3, interval = 1, mean = 0),
+.cfg_default <- list(TRANS_YMAX = 1,
+                     FIG05_FIXED = c(sf4 = 3, interval = 1, mean = 0),
                      FIG11_POINT_ALPHA = 0.25, OUTLIER_UNIT = "rep", DAK_CUT = 0.1,
                      FIG14_SHOW_CURVE = TRUE, SAVE_PDF = FALSE)
 for (.nm in names(.cfg_default))
@@ -374,7 +375,12 @@ anova_type3 <- function(reps, dv) {
 
 # 전치 비율 막대 그림들(그림 7·8·12·15, 예비 NRM 쌍별)이 함께 쓰는 y 범위
 #   쌍별 누적 막대는 한 반복에서 여러 쌍이 전치되면 전체 비율보다 높아질 수 있어 그 값까지 포함
+#   기본 0 ~ 100% (TRANS_YMAX). 쌍별 누적 합이 100% 를 넘는 조건이 있을 때만 그 값까지 늘림
 trans_ylim <- function(sums) {
-  c(0, nice_upper(unlist(lapply(sums, function(s)
-    pmax(s$prop_any, s$prop_12 + s$prop_23 + s$prop_34)))))
+  need <- nice_upper(unlist(lapply(sums, function(s)
+    pmax(s$prop_any, s$prop_12 + s$prop_23 + s$prop_34))))
+  if (need > TRANS_YMAX)
+    message(sprintf("  [주의] 쌍별 누적 전치 비율이 %.0f%% 를 넘어 y축을 %.0f%% 까지 늘림",
+                    100 * TRANS_YMAX, 100 * need))
+  c(0, max(TRANS_YMAX, need))
 }
