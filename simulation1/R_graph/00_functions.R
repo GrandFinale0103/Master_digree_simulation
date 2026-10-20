@@ -341,10 +341,7 @@ plot_stack <- function(df, fill, values, labels, legend_title, ylim,
 # ── 로지스틱 회귀 우도비 검정 표 (전치 여부 ~ 채점함수 × 경계모수 간격 × 심각도) ──
 transposition_lrt <- function(reps) {
   d   <- reps %>% mutate(y = as.numeric(transposed))
-  # Type III 검정이 다른 요인에 대해 평균한 효과를 검정하도록 합-0 대비(contr.sum) 사용
-  #   (기본값 contr.treatment 이면 주효과·2원 상호작용이 기준 수준에서의 효과가 됨)
-  fit <- suppressWarnings(glm(y ~ f_sf * f_int * f_mean, data = d, family = binomial("logit"),
-                              contrasts = list(f_sf = contr.sum, f_int = contr.sum, f_mean = contr.sum)))
+  fit <- suppressWarnings(glm(y ~ f_sf * f_int * f_mean, data = d, family = binomial("logit")))
   lrt <- suppressWarnings(drop1(fit, scope = ~., test = "Chisq"))
   col <- intersect(c("LRT", "Chisq"), colnames(lrt))[1]
   tm  <- rownames(lrt)[rownames(lrt) != "<none>"]
