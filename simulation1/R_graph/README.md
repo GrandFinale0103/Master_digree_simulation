@@ -48,6 +48,8 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `fig03_crc_transposition` | 경계모수 전치 | 순서대로인 경계모수 vs 전치 (b3 > b4) |
 | `fig04_scoring_function` | 경계모수 전치 | 채점함수 간격 1 / 0.66 / 0.33 (수직선) |
 | `fig05_crc_scoring_function` | 경계모수 전치 | 채점함수 간격에 따른 범주반응곡선 |
+| `fig05b_crc_interval` | 방법 (독립변인) | 경계모수 간격 0.5 / 1.0 / 1.5 에 따른 범주반응곡선 |
+| `fig05c_crc_mean` | 방법 (독립변인) | 문항 난이도 0 / 0.5 / 1.0 에 따른 범주반응곡선 |
 | `fig06_true_boundaries` | 방법 | 조건별 참 경계모수와 θ 분포 |
 | `fig07_sim1_transposition` | 결과1 전치 비율 | GPCM 전치 비율 |
 | `fig08_sim1_transposition_pairs` | 결과1 전치 비율 | GPCM 경계모수 쌍별 전치 비율 (누적 막대) |
@@ -94,6 +96,7 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `FIG11_B4_COND`, `FIG11_B3_COND` | 0.33 · 1.5 · 1.0 | 그림 11 조건 |
 | `FIG11_REP` | `NULL` | 그림 11 점에 쓸 반복 (NULL = 추정값이 조건 평균에 가장 가까운 반복) |
 | `FIG11_POINT_ALPHA` | 0.25 | 그림 11 점 투명도 (겹칠수록 진해짐) |
+| `FIG05_FIXED` | s4 = 3, 간격 1, 난이도 0 | 그림 5b·5c 에서 바꾸지 않는 변인의 값 |
 | `FIG10_CONDS` | 2개 조건 | 그림 10 에 위아래로 놓을 조건 |
 | `FIG14_COND`, `FIG14_YLIM` | 0.33 · 1.5 · 1.0, −10 ~ 15 | 그림 14 조건과 y 범위 (범위 밖 점 수는 콘솔에 출력) |
 | `BASE_SIZE`, `DPI`, `SAVE_PDF` | 20, 300, FALSE | 글씨 크기, 해상도, PDF 동시 저장 |

@@ -8,6 +8,9 @@
 #   fig03_crc_transposition    그림 3   순서대로인 경계모수 vs 전치된 경계모수
 #   fig04_scoring_function     그림 4   채점함수 간격 (수직선)
 #   fig05_crc_scoring_function 그림 5   채점함수 간격에 따른 범주반응곡선
+#   fig05b_crc_interval        그림 5b  경계모수 간격에 따른 범주반응곡선 (시뮬레이션1 수준)
+#   fig05c_crc_mean            그림 5c  문항 난이도에 따른 범주반응곡선   (시뮬레이션1 수준)
+#   그림 5·5b·5c 는 같은 크기·축, 바꾸지 않는 독립변수는 FIG05_FIXED 값으로 고정
 # =============================================================================
 
 source("R_graph/00_functions.R", encoding = "UTF-8")
@@ -121,3 +124,25 @@ p5 <- ggplot(d5, aes(theta, prob)) +
   crc_layers(d5, "f_sf") +
   facet_wrap(~f_sf, nrow = 1, labeller = as_labeller(lab_sf))
 save_fig(p5, "fig05_crc_scoring_function", 16, 6.5)
+
+# ── 그림 5b·5c: 경계모수 간격·문항 난이도에 따른 범주반응곡선 ──────────────────
+# 바꾸는 변인 외에는 FIG05_FIXED 로 고정 (기본: 채점함수 등간격, 간격 1.0, 난이도 0)
+sf_fixed <- c(0, 1, 2, FIG05_FIXED[["sf4"]], 4)
+
+d5b <- bind_rows(lapply(sort(SIM1_IV2), function(d)
+  crc_long(THETA, crc_true(THETA, FIG05_FIXED[["mean"]] + d * B_OFFSET, sf = sf_fixed),
+           f_int = fmt_level(d))))
+d5b$f_int <- factor(d5b$f_int, levels = INTERVAL_LEVELS)
+p5b <- ggplot(d5b, aes(theta, prob)) +
+  crc_layers(d5b, "f_int") +
+  facet_wrap(~f_int, nrow = 1, labeller = as_labeller(lab_interval))
+save_fig(p5b, "fig05b_crc_interval", 16, 6.5)
+
+d5c <- bind_rows(lapply(sort(SIM1_IV3), function(m)
+  crc_long(THETA, crc_true(THETA, m + FIG05_FIXED[["interval"]] * B_OFFSET, sf = sf_fixed),
+           f_mean = fmt_level(m))))
+d5c$f_mean <- factor(d5c$f_mean, levels = MEAN_LEVELS)
+p5c <- ggplot(d5c, aes(theta, prob)) +
+  crc_layers(d5c, "f_mean") +
+  facet_wrap(~f_mean, nrow = 1, labeller = as_labeller(lab_mean))
+save_fig(p5c, "fig05c_crc_mean", 16, 6.5)
