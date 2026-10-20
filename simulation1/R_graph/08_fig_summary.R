@@ -3,7 +3,7 @@
 # 논의 — 27개 조건의 주요 결과를 한 장에 요약한 히트맵
 #
 #   fig16_summary_heatmap   행 = 조건 (채점함수 간격별로 묶음), 열 = 지표
-#     GPCM 전치 비율 · GPCM b4 편향 · NRM 전치 비율 · NRM b4 RMSE(이상치 제거 후)
+#     GPCM 전치 비율 · GPCM b4 Bias · NRM 전치 비율 · NRM b4 RMSE(이상치 제거 후)
 #     칸 색 = 열 안에서 |값| / 최댓값 (진할수록 큼), 칸 숫자 = 실제 값
 # =============================================================================
 
@@ -17,7 +17,7 @@ e1 <- summarise_error(reps1) %>% filter(param == "b4")
 cols <- list(
   t1 %>% transmute(f_sf, f_int, f_mean, key = "gpcm_trans", value = prop_any),
   e1 %>% transmute(f_sf, f_int, f_mean, key = "gpcm_bias", value = bias))
-col_lab <- c(gpcm_trans = "GPCM\n전치 비율", gpcm_bias = "GPCM\nb4 편향",
+col_lab <- c(gpcm_trans = "GPCM\n전치 비율", gpcm_bias = "GPCM\nb4 Bias",
              nrm_trans  = "NRM\n전치 비율",  nrm_rmse  = "NRM\nb4 RMSE")
 
 if (file.exists(file.path(DATA_DIR, "sim2_nrm_item1.rds"))) {

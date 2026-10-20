@@ -7,7 +7,7 @@
 #   이상치: |b̂ − b| ≥ ERR_CUT (00_config.R), OUTLIER_UNIT 에 따라 반복 전체 또는 해당 값만 제거
 #
 # 배치 (모든 그림 같음): 행 = 경계모수, 열 = 채점함수 간격, x = 문항 난이도, 색 = 경계모수 간격
-# 같은 지표(편향끼리, RMSE끼리)는 시뮬레이션1·2의 행별 y 범위를 같게 맞춤
+# y축: Bias 그림끼리, RMSE 그림끼리 모든 패널이 같음 (시뮬레이션1·2 포함)
 #   *_b3b4 : b3, b4 만 (발표용)        *_b1b4 : b1~b4 (부록용)
 #
 #   fig09_sim1_bias_*   그림 9   GPCM 편향
@@ -42,26 +42,27 @@ if (has2) {
 }
 
 # ── 그림 ────────────────────────────────────────────────────────────────────
+# y축: Bias 그림끼리, RMSE 그림끼리 모든 패널이 같음
+#      (시뮬레이션1·2, b3b4·b1b4 판 모두 — 두 시뮬레이션의 b1~b4 값을 모두 담는 범위)
+all_err   <- if (has2) bind_rows(err1, err2) else err1
+ylim_bias <- common_ylim(all_err$bias)
+ylim_rmse <- common_ylim(all_err$rmse)
 height_for <- function(params) 4 + 3.2 * length(params)
 
 for (set in names(PARAM_SETS)) {
   ps <- PARAM_SETS[[set]]
   e1 <- err1 %>% filter(param %in% ps) %>% droplevels()
   e2 <- if (has2) err2 %>% filter(param %in% ps) %>% droplevels()
-  both <- if (has2) list(e1, e2) else list(e1)
-  h <- height_for(ps)
+  h  <- height_for(ps)
 
-  bias_blank <- row_range_blank(both, "bias", rows = "param_lab", include_zero = TRUE)
-  rmse_blank <- row_range_blank(both, "rmse", rows = "param_lab", include_zero = TRUE)
-
-  save_fig(plot_lines(e1, "bias", LAB$bias, rows = "param_lab", blank = bias_blank, hline = 0),
+  save_fig(plot_lines(e1, "bias", LAB$bias, ylim_bias, rows = "param_lab", hline = 0),
            paste0("fig09_sim1_bias_", set), 16, h)
-  save_fig(plot_lines(e1, "rmse", LAB$rmse, rows = "param_lab", blank = rmse_blank),
+  save_fig(plot_lines(e1, "rmse", LAB$rmse, ylim_rmse, rows = "param_lab"),
            paste0("extra_sim1_rmse_", set), 16, h)
   if (has2) {
-    save_fig(plot_lines(e2, "rmse", LAB$rmse, rows = "param_lab", blank = rmse_blank),
+    save_fig(plot_lines(e2, "rmse", LAB$rmse, ylim_rmse, rows = "param_lab"),
              paste0("fig13_sim2_rmse_", set), 16, h)
-    save_fig(plot_lines(e2, "bias", LAB$bias, rows = "param_lab", blank = bias_blank, hline = 0),
+    save_fig(plot_lines(e2, "bias", LAB$bias, ylim_bias, rows = "param_lab", hline = 0),
              paste0("extra_sim2_bias_", set), 16, h)
   }
 }
@@ -70,11 +71,11 @@ for (set in names(PARAM_SETS)) {
 save_table(anova_type3(reps1, "err_b3"), "tab_sim1_bias_anova_b3")
 save_table(anova_type3(reps1, "err_b4"), "tab_sim1_bias_anova_b4")
 
-# ── 표: 조건별 편향·RMSE ────────────────────────────────────────────────────
+# ── 표: 조건별 Bias·RMSE ────────────────────────────────────────────────────
 tab_err <- function(e, model) {
   e %>% transmute(`모형` = model, `경계모수` = param, `채점함수 간격` = f_sf,
                   `경계모수 간격` = f_int, `문항 난이도` = f_mean, `반복 수` = n,
-                  `편향` = round(bias, 3), RMSE = round(rmse, 3))
+                  Bias = round(bias, 3), RMSE = round(rmse, 3))
 }
 save_table(bind_rows(tab_err(err1, "GPCM"),
                      if (has2) tab_err(err2, "NRM(이상치 제거 후)"),

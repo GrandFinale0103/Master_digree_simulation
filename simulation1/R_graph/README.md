@@ -4,8 +4,8 @@
 시뮬레이션 결과 파일과 설정한 조건(`00_config.R`)으로 그립니다.
 
 - 그래프에는 제목·설명을 넣지 않음 (캡션은 PPT·논문에서 직접 작성)
-- 축·범례·패널 라벨은 모두 한국어 (모형 이름 GPCM·NRM, 지표 이름 RMSE 만 영어)
-- 글씨 기본 크기 22pt, 300 dpi PNG
+- 축·범례·패널 라벨은 한국어 (θ, P(θ), Bias, RMSE, GPCM·NRM 은 기호·약어 그대로)
+- 글씨 기본 크기 20pt, 300 dpi PNG
 - 비교되는 그래프는 축 범위와 패널 배열이 같음
 
 ## 실행
@@ -51,11 +51,11 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `fig06_true_boundaries` | 방법 | 조건별 참 경계모수와 θ 분포 |
 | `fig07_sim1_transposition` | 결과1 전치 비율 | GPCM 전치 비율 |
 | `fig08_sim1_transposition_pairs` | 결과1 전치 비율 | GPCM 경계모수 쌍별 전치 비율 (누적 막대) |
-| `fig09_sim1_bias_b3b4` / `_b1b4` | 결과1 Bias | GPCM 편향 |
+| `fig09_sim1_bias_b3b4` / `_b1b4` | 결과1 Bias | GPCM Bias |
 | `fig10_estimate_distribution` | 결과1 Bias | b̂3·b̂4 분포와 참값 |
-| `fig11_1_b4_curves` | 결과1 편향 원리 | 범주 4·5: 참 / GPCM 문항특성곡선 |
-| `fig11_2_b4_curves_theta` | 결과1 편향 원리 | 11-1 + 범주 4·5 응답자 θ (초록 θ < b4, 파랑 θ ≥ b4) |
-| `fig11_3_b3_curves` | 결과1 편향 원리 | 범주 3·4: 참 / GPCM 문항특성곡선 |
+| `fig11_1_b4_curves` | 결과1 편향 원리 | 범주 4·5: 참 / GPCM 문항특성곡선 (두 곡선 모두 참 b4 에 위치, 기울기만 다름) |
+| `fig11_2_b4_curves_theta` | 결과1 편향 원리 | 11-1 + 범주 4·5 응답자 θ (y = 0, 반투명, 초록 θ < b4, 파랑 θ ≥ b4) |
+| `fig11_3_b3_curves` | 결과1 편향 원리 | 범주 3·4: 참 / GPCM 문항특성곡선 (두 곡선 모두 참 b3 에 위치) |
 | `fig11_4_b3_curves_theta` | 결과1 편향 원리 | 11-3 + 범주 3·4 응답자 θ |
 | `fig12_sim2_transposition` | 결과2 전치 비율 | NRM 전치 비율 (그림 7과 같은 축) |
 | `fig12b_transposition_difference` | 결과2 전치 비율 | NRM − GPCM 전치 비율 차이 |
@@ -63,12 +63,13 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `fig14_nrm_denominator` | 결과2 추가 설명 | 분모 â(ŝ5 − ŝ4) vs b̂4 |
 | `fig15_nrm_cause` | 결과2 | 원인별 NRM 전치 비율 (그림 8과 같은 배치·축) |
 | `fig16_summary_heatmap` | 논의 | 27개 조건 주요 결과 요약 |
-| `extra_*` | 질의응답 예비 | GPCM RMSE, NRM 편향, NRM 쌍별 전치, KL 극한 vs 시뮬레이션 편향, 채점함수 전치 사례 범주반응곡선 |
+| `extra_*` | 질의응답 예비 | GPCM RMSE, NRM Bias, NRM 쌍별 전치, KL 극한 vs 시뮬레이션 Bias, 채점함수 전치 사례 범주반응곡선 |
 
 배치 규칙
-- 선 그래프 (그림 7·9·12·13): 열 = 채점함수 간격, x = 문항 난이도, 색·모양·선 = 경계모수 간격, (행 = 경계모수)
-- 누적 막대 (그림 8·15): 행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 난이도
-- 같은 지표(전치 비율끼리, 편향끼리, RMSE끼리)는 GPCM 과 NRM 그림의 y 범위가 같음
+- 전치 비율 막대 (그림 7·8·12·15): 9개 패널 — 행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 난이도
+  y축은 이 그림들과 예비 NRM 쌍별 그림이 모두 같음
+- Bias·RMSE 선 그래프 (그림 9·13): 행 = 경계모수, 열 = 채점함수 간격, x = 문항 난이도, 색·모양·선 = 경계모수 간격
+  Bias 그림끼리, RMSE 그림끼리 **모든 패널의 y축이 같음** (시뮬레이션1·2, b3b4·b1b4 판 모두)
 - 그림 11-1~11-4 는 x·y 범위와 그림 크기가 모두 같아 슬라이드에서 겹쳐 넘겨도 곡선 위치가 같음
 
 ## 표 목록
@@ -78,7 +79,7 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `tab_sim1_transposition_lrt` / `tab_sim2_transposition_lrt` | 전치 여부 로지스틱 회귀 우도비 검정 |
 | `tab_sim1_bias_anova_b3` / `_b4` | GPCM (b̂ − b) Type III 분산분석 (η², 편 η²) |
 | `tab_transposition_by_condition` | 조건별 전치 비율 (전체·쌍별) |
-| `tab_error_by_condition` | 조건 × 경계모수별 편향·RMSE |
+| `tab_error_by_condition` | 조건 × 경계모수별 Bias·RMSE |
 | `tab_sim2_outliers` | NRM 조건별 이상치 제거 반복 수·비율 |
 | `tab_nrm_cause_by_condition` | 조건별 원인별 NRM 전치 비율 |
 | `tab_fig11_summary` | 그림 11 에 쓴 값 (참값, 추정 평균, 대표 반복, 초록·파랑 점 수) |
@@ -92,8 +93,9 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `ERR_CUT`, `OUTLIER_UNIT` | 3, `"rep"` | NRM 이상치: \|b̂ − b\| ≥ 3 인 값이 있는 반복 전체 제거 (simulation2 16번과 같음). `"param"` 이면 그 값만 제거 |
 | `FIG11_B4_COND`, `FIG11_B3_COND` | 0.33 · 1.5 · 1.0 | 그림 11 조건 |
 | `FIG11_REP` | `NULL` | 그림 11 점에 쓸 반복 (NULL = 추정값이 조건 평균에 가장 가까운 반복) |
+| `FIG11_POINT_ALPHA` | 0.25 | 그림 11 점 투명도 (겹칠수록 진해짐) |
 | `FIG10_CONDS` | 2개 조건 | 그림 10 에 위아래로 놓을 조건 |
 | `FIG14_COND`, `FIG14_YLIM` | 0.33 · 1.5 · 1.0, −10 ~ 15 | 그림 14 조건과 y 범위 (범위 밖 점 수는 콘솔에 출력) |
-| `BASE_SIZE`, `DPI`, `SAVE_PDF` | 22, 300, FALSE | 글씨 크기, 해상도, PDF 동시 저장 |
+| `BASE_SIZE`, `DPI`, `SAVE_PDF` | 20, 300, FALSE | 글씨 크기, 해상도, PDF 동시 저장 |
 | `FONT_FAMILY` | Windows: 맑은 고딕 | 한글 글꼴 |
 | `LAB` | | 축·범례 라벨 |

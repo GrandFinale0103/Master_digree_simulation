@@ -64,6 +64,7 @@ FIG11_B4_COND <- c(sf4 = 3.66, interval = 1.5, mean = 1)   # b4 (과소추정) �
 FIG11_B3_COND <- c(sf4 = 3.66, interval = 1.5, mean = 1)   # b3 (과대추정) 조건
 FIG11_REP     <- NULL   # 점으로 찍을 반복 번호. NULL = 추정값이 조건 평균에 가장 가까운 반복
 FIG11_XLIM    <- c(-3, 6)
+FIG11_POINT_ALPHA <- 0.25  # 점 투명도 (작을수록 투명, 겹칠수록 진해짐)
 
 # 그림 10: 추정값 분포 (위아래로 놓을 조건들)
 FIG10_CONDS <- list(
@@ -91,7 +92,7 @@ FONT_FAMILY <- switch(Sys.info()[["sysname"]],
                       Windows = "Malgun Gothic",
                       Darwin  = "Apple SD Gothic Neo",
                       "NanumGothic")
-BASE_SIZE <- 22      # 기본 글씨 크기 (pt). PPT 전체 폭에 넣었을 때 기준
+BASE_SIZE <- 20      # 기본 글씨 크기 (pt). PPT 전체 폭에 넣었을 때 기준
 DPI       <- 300
 SAVE_PDF  <- FALSE   # TRUE 면 같은 이름의 PDF 도 저장 (cairo_pdf)
 
@@ -100,23 +101,24 @@ LAB <- list(
   sf       = "채점함수 간격",
   interval = "경계모수 간격",
   mean     = "문항 난이도",
-  theta    = "능력모수(θ)",
-  prob     = "응답 확률",
+  theta    = "\u03b8",
+  prob     = "P(\u03b8)",
   category = "범주",
   trans    = "전치 비율",
   trans_diff = "전치 비율 차이(NRM − GPCM)",
   pair     = "전치된 경계모수 쌍",
   trans_any = "전체 전치 비율",
-  bias     = "편향",
+  bias     = "Bias",
   rmse     = "RMSE",
   density  = "밀도",
   estimate = "경계모수 추정값",
   sf_value = "채점함수 값",
   true_model = "참 모형",
   gpcm     = "GPCM 추정",
+  gpcm_fig11 = "GPCM",
   nrm      = "NRM 추정",
-  kl_bias  = "KL 극한으로 계산한 편향",
-  sim_bias = "시뮬레이션 편향",
+  kl_bias  = "KL 극한으로 계산한 Bias",
+  sim_bias = "시뮬레이션 Bias",
   cause    = "전치 원인",
   sf_order = "추정된 채점함수"
 )

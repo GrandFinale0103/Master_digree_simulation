@@ -7,7 +7,7 @@
 #
 #   fig14_nrm_denominator     그림 14  분모 a1·(ak4 − ak3) vs b̂4 (FIG14_COND 조건, 반복마다 점 1개)
 #                                      빨강: 채점함수 전치 (ak4 ≤ ak3), 회색 점선: 분자를 참값으로 고정한 b4
-#   fig15_nrm_cause           그림 15  전치 비율을 원인별로 나눈 누적 막대 (그림 8과 같은 배치·축)
+#   fig15_nrm_cause           그림 15  전치 비율을 원인별로 나눈 누적 막대 (그림 7·8·12와 같은 배치·축)
 #                                      극단 오차: b1~b4 중 하나라도 |b̂ − b| ≥ ERR_CUT
 #                                      채점함수 이상: 인접 채점함수 차이 ≤ 0 또는 |차이| < DAK_CUT
 #   extra_nrm_sf_reversal_crc 예비     채점함수가 전치된 반복 1개의 범주반응곡선 (참 모형 vs NRM 추정)
@@ -90,14 +90,12 @@ cause_long <- cause %>%
   pivot_longer(all_of(cause_levels), names_to = "cause", values_to = "prop") %>%
   mutate(cause = factor(cause, levels = cause_levels))
 
-# 그림 8 (GPCM 쌍별), 예비 NRM 쌍별 그래프와 같은 y 범위
-s1 <- summarise_transposition(reps1); s2 <- summarise_transposition(reps2)
-stack_top <- nice_upper(unlist(lapply(list(s1, s2), function(s)
-  pmax(s$prop_any, s$prop_12 + s$prop_23 + s$prop_34))))
+# 그림 7·8·12 와 같은 y 범위
+ylim_t <- trans_ylim(list(summarise_transposition(reps1), summarise_transposition(reps2)))
 
-p15 <- plot_stack(cause_long, "cause", cause_cols, cause_labels, LAB$cause, stack_top) +
+p15 <- plot_stack(cause_long, "cause", cause_cols, cause_labels, LAB$cause, ylim_t) +
   guides(fill = guide_legend(nrow = 2, byrow = TRUE))
-save_fig(p15, "fig15_nrm_cause", 15, 13)
+save_fig(p15, "fig15_nrm_cause", 15, 14)
 
 save_table(cause %>% transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 난이도` = f_mean,
                                `반복 수` = n,

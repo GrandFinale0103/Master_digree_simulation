@@ -7,13 +7,17 @@
 #   fig11_2_b4_curves_theta       그림 11-2  11-1 + 범주 4·5 응답자 θ (초록: θ < b4, 파랑: θ ≥ b4)
 #   fig11_3_b3_curves             그림 11-3  범주 3·4 응답자의 참 / GPCM 문항특성곡선 (b3)
 #   fig11_4_b3_curves_theta       그림 11-4  11-3 + 범주 3·4 응답자 θ (초록: θ < b3, 파랑: θ ≥ b3)
-#   extra_kl_vs_sim_bias          예비       KL 극한으로 계산한 편향 vs 시뮬레이션 편향
+#   extra_kl_vs_sim_bias          예비       KL 극한으로 계산한 Bias vs 시뮬레이션 Bias
 #
 # 그림 11 의 곡선 (두 범주만 남겼을 때 높은 범주를 고를 확률)
 #   참 모형  : logistic(a · (s_{k+1} − s_k) · (θ − b_k)),  a = 1, 채점함수 (0, 1, 2, s4, 4)
-#   GPCM 추정: logistic(â · (θ − b̂_k)),  â·b̂_k = 그 조건 반복들의 평균
+#   GPCM     : logistic(â · (θ − b_k)),  â = 그 조건 반복들의 GPCM 변별도 평균
+#              위치는 b̂ 대신 참 b 에 맞춤 → 두 곡선의 기울기 차이만 남아
+#              b 아래·위에서 GPCM 이 logit 을 과대·과소 예측하는 것을 설명할 수 있음
+#              (실제 추정 평균 b̂ 는 tab_fig11_summary 에 기록)
 #   점       : 대표 반복 1개의 응답 파일에서 문항 1에 두 범주 중 하나로 응답한 사람의 참 θ
 #              (FIG11_REP = NULL 이면 b̂3·b̂4 가 조건 평균에 가장 가까운 반복, 유령 응답자 제외)
+#              모두 y = 0 에 찍고 투명도(FIG11_POINT_ALPHA)를 줘서 겹칠수록 진해짐
 #   네 그림 모두 x축·y축 범위가 같음
 #
 # 표
@@ -76,7 +80,7 @@ read_response <- function(cond, rep) {
 }
 
 THETA11 <- seq(FIG11_XLIM[1], FIG11_XLIM[2], length.out = 400)
-Y11     <- c(-0.17, 1.06)
+Y11     <- c(0, 1.06)
 fig11_rows <- list()
 
 make_fig11 <- function(cond, k, fig_a, fig_b) {
@@ -88,52 +92,48 @@ make_fig11 <- function(cond, k, fig_a, fig_b) {
   a_hat  <- mean(cr$a, na.rm = TRUE)
   b_hat  <- mean(cr[[paste0("b", k)]])
 
+  # 두 곡선 모두 참 b 에서 0.5 를 지나게 그림 → 기울기 차이만 남아
+  # b 보다 아래·위에서 GPCM 이 logit 을 과대·과소 예측하는 모습을 보여 줌
   curves <- bind_rows(
     data.frame(theta = THETA11, prob = plogis(DISCRIM * w_k * (THETA11 - b_true)), model = "true"),
-    data.frame(theta = THETA11, prob = plogis(a_hat * (THETA11 - b_hat)),          model = "gpcm"))
+    data.frame(theta = THETA11, prob = plogis(a_hat * (THETA11 - b_true)),         model = "gpcm"))
   curves$model <- factor(curves$model, levels = c("true", "gpcm"))
-  vlines <- data.frame(model = factor(c("true", "gpcm"), levels = c("true", "gpcm")),
-                       x = c(b_true, b_hat),
-                       lab = c(sprintf("b[%d]", k), sprintf("hat(b)[%d]", k)),
-                       hjust = ifelse(c(b_true, b_hat) == max(b_true, b_hat), -0.15, 1.15))
 
-  ylab <- sprintf("P(범주 %d | 범주 %d 또는 %d)", k + 1, k, k + 1)
   base <- ggplot() +
     geom_hline(yintercept = c(0, 0.5), colour = "grey60", linewidth = 0.5) +
-    geom_vline(data = vlines, aes(xintercept = x, colour = model), linetype = "dashed", linewidth = 0.9,
-               show.legend = FALSE) +
-    geom_text(data = vlines, aes(x = x, y = 1.04, label = lab, colour = model, hjust = hjust),
-              parse = TRUE, size = BASE_SIZE / 3, family = FONT_FAMILY, show.legend = FALSE) +
+    geom_vline(xintercept = b_true, colour = "grey30", linetype = "dashed", linewidth = 0.9) +
+    annotate("text", x = b_true, y = 1.04, label = sprintf("b[%d] == hat(b)[%d]", k, k), parse = TRUE,
+             hjust = -0.08, size = BASE_SIZE / 3, family = FONT_FAMILY) +
     geom_line(data = curves, aes(theta, prob, colour = model, linetype = model), linewidth = LW + 0.3) +
     scale_colour_manual(values = c(true = COL_TRUE, gpcm = COL_GPCM),
-                        labels = c(true = LAB$true_model, gpcm = LAB$gpcm), name = NULL) +
+                        labels = c(true = LAB$true_model, gpcm = LAB$gpcm_fig11), name = NULL) +
     scale_linetype_manual(values = c(true = "solid", gpcm = "longdash"),
-                          labels = c(true = LAB$true_model, gpcm = LAB$gpcm), name = NULL) +
+                          labels = c(true = LAB$true_model, gpcm = LAB$gpcm_fig11), name = NULL) +
     scale_x_continuous(breaks = seq(ceiling(FIG11_XLIM[1]), floor(FIG11_XLIM[2]), 1),
                        limits = FIG11_XLIM) +
     scale_y_continuous(breaks = seq(0, 1, 0.25), limits = Y11) +
-    labs(x = LAB$theta, y = ylab) +
+    labs(x = LAB$theta, y = LAB$prob) +
     theme_thesis()
   save_fig(base, fig_a, 12, 8.5)   # 점 그림과 같은 크기 → 슬라이드에서 겹쳐도 곡선 위치가 같음
 
   # 점: 대표 반복에서 범주 k 또는 k+1 로 응답한 사람 (응답값 0~4 → 범주 = 응답값 + 1)
+  #     모두 y = 0 에 찍고 투명도를 줘서 겹칠수록 진해짐
   rep  <- pick_rep(cr)
   resp <- read_response(cond, rep)
   pts  <- resp %>% filter(!is.na(theta), item1 %in% c(k - 1, k)) %>%
     mutate(side = factor(ifelse(theta < b_true, "below", "above"), levels = c("below", "above")))
-  set.seed(rep)
-  pts$y <- runif(nrow(pts), -0.14, -0.03)
   n_out <- sum(pts$theta < FIG11_XLIM[1] | pts$theta > FIG11_XLIM[2])
   if (n_out > 0) message(sprintf("  [주의] %s: x축 범위 밖 점 %d개", fig_b, n_out))
 
   side_lab <- c(below = parse(text = sprintf("theta < b[%d]", k))[[1]],
                 above = parse(text = sprintf("theta >= b[%d]", k))[[1]])
   p_b <- base +
-    geom_point(data = pts, aes(theta, y, fill = side), shape = 21, size = PS - 0.5,
-               colour = "white", stroke = 0.4, alpha = 0.9) +
+    geom_point(data = pts, aes(theta, 0, fill = side), shape = 21, colour = "transparent",
+               size = PS + 0.5, alpha = FIG11_POINT_ALPHA) +
     scale_fill_manual(values = c(below = COL_BELOW, above = COL_ABOVE),
                       labels = side_lab, name = NULL, drop = FALSE) +
-    guides(fill = guide_legend(override.aes = list(size = PS + 1, alpha = 1)))
+    guides(colour = guide_legend(order = 1), linetype = guide_legend(order = 1),
+           fill = guide_legend(order = 2, override.aes = list(size = PS + 1, alpha = 1)))
   save_fig(p_b, fig_b, 12, 8.5)
 
   fig11_rows[[length(fig11_rows) + 1]] <<- data.frame(
@@ -188,6 +188,6 @@ save_fig(p_kl, "extra_kl_vs_sim_bias", 10, 10)
 
 save_table(kl %>% transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 난이도` = f_mean,
                             `경계모수` = param, `참값` = round(true, 3), `KL 극한` = round(limit, 3),
-                            `추정 평균` = round(sim_mean, 3), `KL 극한 편향` = round(kl_bias, 3),
-                            `시뮬레이션 편향` = round(sim_bias, 3)),
+                            `추정 평균` = round(sim_mean, 3), `KL 극한 Bias` = round(kl_bias, 3),
+                            `시뮬레이션 Bias` = round(sim_bias, 3)),
            "tab_kl_limit")

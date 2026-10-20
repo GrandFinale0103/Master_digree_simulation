@@ -70,7 +70,7 @@ p2b <- ggplot(d2b, aes(theta, prob, colour = k)) +
   scale_colour_manual(values = COL_PARAM, guide = "none") +
   scale_x_continuous(breaks = seq(CONCEPT_XLIM[1], CONCEPT_XLIM[2], 1)) +
   scale_y_continuous(limits = c(0, 1.08), breaks = seq(0, 1, 0.25)) +
-  labs(x = LAB$theta, y = "인접 두 범주 중 높은 범주의 응답 확률") +
+  labs(x = LAB$theta, y = LAB$prob) +
   theme_thesis()
 save_fig(p2b, "fig02b_boundary_curves", 11, 7)
 

@@ -31,6 +31,8 @@ COL_CATEGORY <- c("1" = "#0072B2", "2" = "#56B4E9", "3" = "#009E73",
 COL_PARAM    <- c(b1 = "#56B4E9", b2 = "#009E73", b3 = "#0072B2", b4 = "#D55E00")
 COL_TRUE     <- "black"
 COL_GPCM     <- "#D55E00"
+COL_BAR      <- "#4A7FB5"   # 전치 비율 막대
+COL_BAR_NEG  <- "#C8553D"   # 차이 그래프의 음수 막대
 COL_BELOW    <- "#1B9E3E"   # 경계모수보다 작은 θ (초록)
 COL_ABOVE    <- "#1F5FD6"   # 경계모수보다 큰 θ (파랑)
 
@@ -229,16 +231,29 @@ effect_name <- function(term) {
 }
 fmt_p <- function(p) ifelse(p < .001, "< .001", sub("^0", "", sprintf("%.3f", p)))
 
-# ── 공통 그래프 1: 조건별 선 그래프 ──────────────────────────────────────────
+# ── 공통 y 범위 ─────────────────────────────────────────────────────────────
+# 여러 자료의 값을 모두 담는 보기 좋은 범위 (비교할 그림끼리 같은 값을 넘겨 축을 맞춤)
+common_ylim <- function(values, include_zero = TRUE) {
+  v <- values[is.finite(values)]
+  range(pretty(c(v, if (include_zero) 0)))
+}
+nice_upper <- function(x, step = 0.1) ceiling(max(x, na.rm = TRUE) / step) * step
+
+# 9개 패널: 행 = 채점함수 간격, 열 = 경계모수 간격
+facet9 <- function() {
+  facet_grid(rows = vars(f_sf), cols = vars(f_int),
+             labeller = labeller(f_sf = lab_sf, f_int = lab_interval))
+}
+pct_labels <- scales::label_percent(accuracy = 1)
+
+# ── 공통 그래프 1: 조건별 선 그래프 (편향·RMSE) ─────────────────────────────
 #   x = 문항 난이도, 색·모양·선 = 경계모수 간격, 열 = 채점함수 간격, (행 = rows 변수)
-#   비교할 그래프는 같은 ylim(또는 blank)을 넘겨 축을 맞춤
-#   blank: 행별로 축 범위를 맞출 때 쓰는 자료 (rows 변수와 y 열), scales = "free_y" 와 함께
-plot_lines <- function(df, y, ylab, rows = NULL, ylim = NULL, blank = NULL,
-                       hline = NULL, y_labels = waiver(), row_labeller = label_parsed) {
+#   ylim: 모든 패널이 같은 y축 (비교할 그림끼리 같은 ylim 을 넘김)
+plot_lines <- function(df, y, ylab, ylim, rows = NULL, hline = NULL,
+                       y_labels = waiver(), row_labeller = label_parsed) {
   p <- ggplot(df, aes(f_mean, .data[[y]], colour = f_int, shape = f_int,
                       linetype = f_int, group = f_int))
   if (!is.null(hline)) p <- p + geom_hline(yintercept = hline, colour = "grey45", linewidth = 0.7)
-  if (!is.null(blank)) p <- p + geom_blank(data = blank, aes(x = f_mean, y = .data[[y]]), inherit.aes = FALSE)
   p <- p +
     geom_line(linewidth = LW) +
     geom_point(size = PS) +
@@ -246,35 +261,39 @@ plot_lines <- function(df, y, ylab, rows = NULL, ylim = NULL, blank = NULL,
     scale_shape_manual(values = SHP_INTERVAL, name = LAB$interval, drop = FALSE) +
     scale_linetype_manual(values = LTY_INTERVAL, name = LAB$interval, drop = FALSE) +
     scale_x_discrete(drop = FALSE) +
+    scale_y_continuous(labels = y_labels, limits = ylim) +
     labs(x = LAB$mean, y = ylab) +
     theme_thesis()
-  p <- p + if (is.null(ylim)) scale_y_continuous(labels = y_labels) else
-    scale_y_continuous(labels = y_labels, limits = ylim)
   if (is.null(rows)) {
     p + facet_grid(cols = vars(f_sf), labeller = labeller(f_sf = lab_sf))
   } else {
-    p + facet_grid(rows = vars(.data[[rows]]), cols = vars(f_sf), scales = "free_y",
+    p + facet_grid(rows = vars(.data[[rows]]), cols = vars(f_sf),
                    labeller = labeller(.rows = row_labeller, f_sf = lab_sf)) +
       theme(strip.text.y = element_text(angle = 0, size = rel(1.15)))
   }
 }
 
-# 행(경계모수)별 축 범위를 여러 자료에서 같게 맞추기 위한 blank 자료
-row_range_blank <- function(dfs, y, rows = "param", include_zero = FALSE) {
-  all <- bind_rows(lapply(dfs, function(d) d[, c(rows, "f_sf", "f_mean", "f_int", y)]))
-  out <- all %>% group_by(.data[[rows]]) %>%
-    summarise(lo = min(.data[[y]], na.rm = TRUE), hi = max(.data[[y]], na.rm = TRUE), .groups = "drop")
-  if (include_zero) out <- out %>% mutate(lo = pmin(lo, 0), hi = pmax(hi, 0))
-  out %>% pivot_longer(c(lo, hi), values_to = y) %>% select(-name) %>%
-    mutate(f_sf = factor(SF_LEVELS[1], levels = SF_LEVELS),
-           f_mean = factor(MEAN_LEVELS[1], levels = MEAN_LEVELS))
+# ── 공통 그래프 2: 9개 패널 막대 (전치 비율) ────────────────────────────────
+#   행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 난이도
+#   fill_by_sign = TRUE 면 양수·음수 막대 색을 다르게 (차이 그래프)
+plot_bars <- function(df, y, ylab, ylim, y_labels = pct_labels, fill_by_sign = FALSE) {
+  p <- ggplot(df, aes(f_mean, .data[[y]]))
+  if (fill_by_sign) {
+    p <- p + geom_hline(yintercept = 0, colour = "grey30", linewidth = 0.6) +
+      geom_col(aes(fill = .data[[y]] >= 0), width = 0.7, colour = "grey30", linewidth = 0.3) +
+      scale_fill_manual(values = c(`TRUE` = COL_BAR, `FALSE` = COL_BAR_NEG), guide = "none")
+  } else {
+    p <- p + geom_col(fill = COL_BAR, width = 0.7, colour = "grey30", linewidth = 0.3)
+  }
+  p + facet9() +
+    scale_x_discrete(drop = FALSE) +
+    scale_y_continuous(labels = y_labels, limits = ylim) +
+    labs(x = LAB$mean, y = ylab) +
+    theme_thesis()
 }
 
-# 공통 y 범위 (0 부터, 보기 좋은 값으로 올림)
-nice_upper <- function(x, step = 0.1) ceiling(max(x, na.rm = TRUE) / step) * step
-
-# ── 공통 그래프 2: 3 × 3 누적 막대 ────────────────────────────────────────────
-#   행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 난이도, 막대 = fill 변수 누적
+# ── 공통 그래프 3: 9개 패널 누적 막대 ────────────────────────────────────────
+#   plot_bars 와 같은 배치, 막대 = fill 변수 누적
 plot_stack <- function(df, fill, values, labels, legend_title, ylim,
                        total = NULL, total_label = NULL) {
   p <- ggplot(df, aes(f_mean, prop)) +
@@ -286,11 +305,9 @@ plot_stack <- function(df, fill, values, labels, legend_title, ylim,
                         colour = "black") +
       scale_shape_manual(values = c(total = 18), labels = total_label, name = NULL)
   }
-  p +
-    facet_grid(rows = vars(f_sf), cols = vars(f_int),
-               labeller = labeller(f_sf = lab_sf, f_int = lab_interval)) +
+  p + facet9() +
     scale_x_discrete(drop = FALSE) +
-    scale_y_continuous(labels = scales::label_percent(accuracy = 1), limits = c(0, ylim)) +
+    scale_y_continuous(labels = pct_labels, limits = ylim) +
     labs(x = LAB$mean, y = LAB$trans) +
     theme_thesis() +
     theme(legend.box = "vertical", legend.key.width = unit(1.5, "lines"),
@@ -331,4 +348,11 @@ anova_type3 <- function(reps, dv) {
              `편 에타제곱` = ifelse(rownames(tb) == "Residuals", NA,
                                 round(tb[["Sum Sq"]] / (tb[["Sum Sq"]] + ss_res), 4)),
              check.names = FALSE)
+}
+
+# 전치 비율 막대 그림들(그림 7·8·12·15, 예비 NRM 쌍별)이 함께 쓰는 y 범위
+#   쌍별 누적 막대는 한 반복에서 여러 쌍이 전치되면 전체 비율보다 높아질 수 있어 그 값까지 포함
+trans_ylim <- function(sums) {
+  c(0, nice_upper(unlist(lapply(sums, function(s)
+    pmax(s$prop_any, s$prop_12 + s$prop_23 + s$prop_34)))))
 }
