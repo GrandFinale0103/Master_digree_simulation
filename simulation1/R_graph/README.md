@@ -1,0 +1,99 @@
+# R_graph: 결과발표·논문용 그래프
+
+결과발표회 원고의 그림을 만드는 R 코드입니다. 연구 목적 그림(그림 1~5)을 제외한 모든 그림은
+시뮬레이션 결과 파일과 설정한 조건(`00_config.R`)으로 그립니다.
+
+- 그래프에는 제목·설명을 넣지 않음 (캡션은 PPT·논문에서 직접 작성)
+- 축·범례·패널 라벨은 모두 한국어 (모형 이름 GPCM·NRM, 지표 이름 RMSE 만 영어)
+- 글씨 기본 크기 22pt, 300 dpi PNG
+- 비교되는 그래프는 축 범위와 패널 배열이 같음
+
+## 실행
+
+작업 디렉토리를 `simulation1/` 로 맞춘 뒤 실행합니다.
+
+```r
+setwd("경로/simulation1")
+source("R_graph/run_all.R", encoding = "UTF-8")
+```
+
+- `01_collect_data.R` 이 결과 파일을 읽어 `R_graph/output/data/` 에 한 번만 저장합니다 (가장 오래 걸림).
+  결과 파일이 바뀌지 않았으면 `run_all.R` 의 `COLLECT <- FALSE` 로 건너뛸 수 있습니다.
+- 그림 하나만 다시 그리려면 해당 스크립트만 실행합니다. 예: `source("R_graph/06_fig_mechanism.R", encoding = "UTF-8")`
+- 필요한 패키지: dplyr, tidyr, ggplot2, scales, ragg, car (없으면 자동 설치)
+
+출력
+- 그림: `R_graph/output/figures/*.png`
+- 표: `R_graph/output/tables/*.csv` (UTF-8 BOM, 엑셀에서 한글이 깨지지 않음)
+
+## 사용하는 자료
+
+| 자료 | 경로 | 조건 |
+|---|---|---|
+| 시뮬레이션1 (GPCM 추정) | `output/estimated_params/`, `output/responses/` | 정규분포 27개 조건 (조건 코드 넷째 자리 2) |
+| 시뮬레이션2 (NRM 추정) | `../simulation2/output/nrm/estimated_params/` | 시뮬레이션1과 같은 27개 조건만 (임시) |
+
+**임시 대체:** 시뮬레이션2에는 경계모수 간격 1.5 가 없어서 **1.4 결과를 가져와 1.5 로 표시**합니다.
+편향·RMSE 의 참값은 실제 생성에 쓴 1.4 로 계산합니다.
+시뮬레이션1 자료로 NRM 을 추정한 뒤에는 `00_config.R` 의 `SIM2_OUTPUT` 경로와
+`SIM2_SUBSTITUTE_IV2` 를 바꾸면 됩니다. 시뮬레이션2 자료가 없으면 NRM 그림만 건너뜁니다.
+
+## 그림 목록
+
+| 파일 | 원고 위치 | 내용 |
+|---|---|---|
+| `fig01_crc_discrimination` | 연구 목적 | 변별도 1 vs 2 의 범주반응곡선 |
+| `fig02a_crc_boundary` | 연구 목적 | 범주반응곡선과 경계모수 위치 |
+| `fig02b_boundary_curves` | 연구 목적 | 인접 두 범주만 남긴 경계반응곡선 |
+| `fig03_crc_transposition` | 경계모수 전치 | 순서대로인 경계모수 vs 전치 (b3 > b4) |
+| `fig04_scoring_function` | 경계모수 전치 | 채점함수 간격 1 / 0.66 / 0.33 (수직선) |
+| `fig05_crc_scoring_function` | 경계모수 전치 | 채점함수 간격에 따른 범주반응곡선 |
+| `fig06_true_boundaries` | 방법 | 조건별 참 경계모수와 θ 분포 |
+| `fig07_sim1_transposition` | 결과1 전치 비율 | GPCM 전치 비율 |
+| `fig08_sim1_transposition_pairs` | 결과1 전치 비율 | GPCM 경계모수 쌍별 전치 비율 (누적 막대) |
+| `fig09_sim1_bias_b3b4` / `_b1b4` | 결과1 Bias | GPCM 편향 |
+| `fig10_estimate_distribution` | 결과1 Bias | b̂3·b̂4 분포와 참값 |
+| `fig11_1_b4_curves` | 결과1 편향 원리 | 범주 4·5: 참 / GPCM 문항특성곡선 |
+| `fig11_2_b4_curves_theta` | 결과1 편향 원리 | 11-1 + 범주 4·5 응답자 θ (초록 θ < b4, 파랑 θ ≥ b4) |
+| `fig11_3_b3_curves` | 결과1 편향 원리 | 범주 3·4: 참 / GPCM 문항특성곡선 |
+| `fig11_4_b3_curves_theta` | 결과1 편향 원리 | 11-3 + 범주 3·4 응답자 θ |
+| `fig12_sim2_transposition` | 결과2 전치 비율 | NRM 전치 비율 (그림 7과 같은 축) |
+| `fig12b_transposition_difference` | 결과2 전치 비율 | NRM − GPCM 전치 비율 차이 |
+| `fig13_sim2_rmse_b3b4` / `_b1b4` | 결과2 RMSE | NRM RMSE (이상치 제거 후) |
+| `fig14_nrm_denominator` | 결과2 추가 설명 | 분모 â(ŝ5 − ŝ4) vs b̂4 |
+| `fig15_nrm_cause` | 결과2 | 원인별 NRM 전치 비율 (그림 8과 같은 배치·축) |
+| `fig16_summary_heatmap` | 논의 | 27개 조건 주요 결과 요약 |
+| `extra_*` | 질의응답 예비 | GPCM RMSE, NRM 편향, NRM 쌍별 전치, KL 극한 vs 시뮬레이션 편향, 채점함수 전치 사례 범주반응곡선 |
+
+배치 규칙
+- 선 그래프 (그림 7·9·12·13): 열 = 채점함수 간격, x = 문항 난이도, 색·모양·선 = 경계모수 간격, (행 = 경계모수)
+- 누적 막대 (그림 8·15): 행 = 채점함수 간격, 열 = 경계모수 간격, x = 문항 난이도
+- 같은 지표(전치 비율끼리, 편향끼리, RMSE끼리)는 GPCM 과 NRM 그림의 y 범위가 같음
+- 그림 11-1~11-4 는 x·y 범위와 그림 크기가 모두 같아 슬라이드에서 겹쳐 넘겨도 곡선 위치가 같음
+
+## 표 목록
+
+| 파일 | 내용 |
+|---|---|
+| `tab_sim1_transposition_lrt` / `tab_sim2_transposition_lrt` | 전치 여부 로지스틱 회귀 우도비 검정 |
+| `tab_sim1_bias_anova_b3` / `_b4` | GPCM (b̂ − b) Type III 분산분석 (η², 편 η²) |
+| `tab_transposition_by_condition` | 조건별 전치 비율 (전체·쌍별) |
+| `tab_error_by_condition` | 조건 × 경계모수별 편향·RMSE |
+| `tab_sim2_outliers` | NRM 조건별 이상치 제거 반복 수·비율 |
+| `tab_nrm_cause_by_condition` | 조건별 원인별 NRM 전치 비율 |
+| `tab_fig11_summary` | 그림 11 에 쓴 값 (참값, 추정 평균, 대표 반복, 초록·파랑 점 수) |
+| `tab_kl_limit` | KL 극한값과 시뮬레이션 평균 |
+
+## 자주 바꿀 설정 (`00_config.R`)
+
+| 설정 | 기본값 | 내용 |
+|---|---|---|
+| `SF_GAP_LABEL` | 1 / 0.66 / 0.33 | 채점함수 간격 라벨 (실제 4 − s4 = 1 / 0.67 / 0.34) |
+| `ERR_CUT`, `OUTLIER_UNIT` | 3, `"rep"` | NRM 이상치: \|b̂ − b\| ≥ 3 인 값이 있는 반복 전체 제거 (simulation2 16번과 같음). `"param"` 이면 그 값만 제거 |
+| `FIG11_B4_COND`, `FIG11_B3_COND` | 0.33 · 1.5 · 1.0 | 그림 11 조건 |
+| `FIG11_REP` | `NULL` | 그림 11 점에 쓸 반복 (NULL = 추정값이 조건 평균에 가장 가까운 반복) |
+| `FIG10_CONDS` | 2개 조건 | 그림 10 에 위아래로 놓을 조건 |
+| `FIG14_COND`, `FIG14_YLIM` | 0.33 · 1.5 · 1.0, −10 ~ 15 | 그림 14 조건과 y 범위 (범위 밖 점 수는 콘솔에 출력) |
+| `BASE_SIZE`, `DPI`, `SAVE_PDF` | 22, 300, FALSE | 글씨 크기, 해상도, PDF 동시 저장 |
+| `FONT_FAMILY` | Windows: 맑은 고딕 | 한글 글꼴 |
+| `LAB` | | 축·범례 라벨 |
