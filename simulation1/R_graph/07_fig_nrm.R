@@ -7,13 +7,12 @@
 #
 #   fig14_nrm_denominator     그림 14  분모 a1·(ak4 − ak3) vs b̂4 (FIG14_COND 조건, 반복마다 점 1개)
 #                                      빨강: 채점함수 전치 (ak4 ≤ ak3), 회색 점선: 분자를 참값으로 고정한 b4
-#   fig15_nrm_cause           그림 15  전치 비율을 원인별로 나눈 누적 막대 (그림 7·8·12와 같은 배치·축)
-#                                      극단 오차: b1~b4 중 하나라도 |b̂ − b| ≥ ERR_CUT
-#                                      채점함수 이상: 인접 채점함수 차이 ≤ 0 또는 |차이| < DAK_CUT
+#   fig15_nrm_cause           그림 15  전치 비율을 채점함수 전치 여부로 나눈 누적 막대 (그림 7·8·12와 같은 배치·축)
+#                                      채점함수 전치: 인접 채점함수 차이 ≤ 0 이 하나라도 있음
 #   extra_nrm_sf_reversal_crc 예비     채점함수가 전치된 반복 1개의 범주반응곡선 (참 모형 vs NRM 추정)
 #
 # 표
-#   tab_nrm_cause_by_condition  조건별 원인별 전치 비율
+#   tab_nrm_cause_by_condition  조건별 전치 비율 (채점함수 전치 / 전치 없음)
 # =============================================================================
 
 source("R_graph/00_functions.R", encoding = "UTF-8")
@@ -71,20 +70,17 @@ if (nrow(c14) == 0) {
 # =============================================================================
 # 그림 15: 원인별 전치 비율 (그림 8과 같은 배치, 같은 y 범위)
 # =============================================================================
-cause_levels <- c("both", "extreme", "sf", "none")
-cause_labels <- c(both = "극단 오차 + 채점함수 이상", extreme = "극단 오차만",
-                  sf = "채점함수 이상만", none = "둘 다 아님")
-cause_cols   <- c(both = "#7B3294", extreme = "#D55E00", sf = "#E69F00", none = "#999999")
+# 전치된 반복을 채점함수 전치 여부로만 나눔 (극단 오차 기준은 쓰지 않음)
+#   채점함수 전치: 인접 채점함수 차이 ak_k − ak_{k−1} ≤ 0 인 k 가 하나라도 있음 (k = 1..4)
+cause_levels <- c("sf_rev", "sf_ok")
+cause_labels <- c(sf_rev = "채점함수 전치", sf_ok = "채점함수 전치 없음")
+cause_cols   <- c(sf_rev = "#D55E00", sf_ok = "#999999")
 
 cause <- reps2 %>%
-  mutate(cause = case_when(extreme & sf_issue ~ "both", extreme ~ "extreme",
-                           sf_issue ~ "sf", TRUE ~ "none")) %>%
   group_by(f_sf, f_int, f_mean) %>%
-  summarise(n = n(),
-            both    = sum(transposed & cause == "both") / n,
-            extreme = sum(transposed & cause == "extreme") / n,
-            sf      = sum(transposed & cause == "sf") / n,
-            none    = sum(transposed & cause == "none") / n,
+  summarise(n      = n(),
+            sf_rev = sum(transposed & sf_rev) / n,
+            sf_ok  = sum(transposed & !sf_rev) / n,
             .groups = "drop")
 cause_long <- cause %>%
   pivot_longer(all_of(cause_levels), names_to = "cause", values_to = "prop") %>%
@@ -93,17 +89,14 @@ cause_long <- cause %>%
 # 그림 7·8·12 와 같은 y 범위
 ylim_t <- trans_ylim(list(summarise_transposition(reps1), summarise_transposition(reps2)))
 
-p15 <- plot_stack(cause_long, "cause", cause_cols, cause_labels, LAB$cause, ylim_t) +
-  guides(fill = guide_legend(nrow = 2, byrow = TRUE))
+p15 <- plot_stack(cause_long, "cause", cause_cols, cause_labels, LAB$cause, ylim_t)
 save_fig(p15, "fig15_nrm_cause", 15, 14)
 
 save_table(cause %>% transmute(`채점함수 간격` = f_sf, `경계모수 간격` = f_int, `문항 심각도` = f_mean,
                                `반복 수` = n,
-                               `전체 전치(%)` = round(100 * (both + extreme + sf + none), 1),
-                               `극단 오차 + 채점함수 이상(%)` = round(100 * both, 1),
-                               `극단 오차만(%)` = round(100 * extreme, 1),
-                               `채점함수 이상만(%)` = round(100 * sf, 1),
-                               `둘 다 아님(%)` = round(100 * none, 1)),
+                               `전체 전치(%)` = round(100 * (sf_rev + sf_ok), 1),
+                               `채점함수 전치(%)` = round(100 * sf_rev, 1),
+                               `채점함수 전치 없음(%)` = round(100 * sf_ok, 1)),
            "tab_nrm_cause_by_condition")
 
 # =============================================================================

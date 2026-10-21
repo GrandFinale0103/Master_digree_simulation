@@ -64,7 +64,7 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `fig12b_transposition_difference` | 결과2 전치 비율 | NRM − GPCM 전치 비율 차이 |
 | `fig13_sim2_rmse_b3b4` / `_b1b4` | 결과2 RMSE | NRM RMSE (이상치 제거 후) |
 | `fig14_nrm_denominator` | 결과2 추가 설명 | 분모 â(ŝ5 − ŝ4) vs b̂4 |
-| `fig15_nrm_cause` | 결과2 | 원인별 NRM 전치 비율 (그림 8과 같은 배치·축) |
+| `fig15_nrm_cause` | 결과2 | NRM 전치 비율을 채점함수 전치 여부로 나눈 누적 막대 (그림 8과 같은 배치·축) |
 | `fig16_summary_heatmap` | 논의 | 27개 조건 주요 결과 요약 |
 | `extra_*` | 질의응답 예비 | GPCM RMSE, NRM Bias, NRM 쌍별 전치, KL 극한 vs 시뮬레이션 Bias, 채점함수 전치 사례 범주반응곡선 |
 
@@ -84,7 +84,7 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `tab_transposition_by_condition` | 조건별 전치 비율 (전체·쌍별) |
 | `tab_error_by_condition` | 조건 × 경계모수별 Bias·RMSE |
 | `tab_sim2_outliers` | NRM 조건별 이상치 제거 반복 수·비율 |
-| `tab_nrm_cause_by_condition` | 조건별 원인별 NRM 전치 비율 |
+| `tab_nrm_cause_by_condition` | 조건별 NRM 전치 비율 (채점함수 전치 / 전치 없음) |
 | `tab_fig11_summary` | 그림 11 에 쓴 값 (참값, 추정 평균, 대표 반복, 초록·파랑 점 수) |
 | `tab_kl_limit` | KL 극한값과 시뮬레이션 평균 |
 

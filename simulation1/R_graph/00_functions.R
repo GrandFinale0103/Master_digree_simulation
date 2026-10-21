@@ -209,6 +209,7 @@ flag_nrm <- function(df) {
   df$extreme  <- apply(err >= ERR_CUT, 1, any)
   df$sf_issue <- apply(dak <= 0 | abs(dak) < DAK_CUT, 1, any)
   df$sf_rev4  <- dak[, 4] <= 0
+  df$sf_rev   <- apply(dak <= 0, 1, any)   # 채점함수 전치 (인접 차이 ≤ 0 이 하나라도)
   df
 }
 
