@@ -8,7 +8,7 @@
 #   fig14_nrm_denominator     그림 14  분모 a1·(ak4 − ak3) vs b̂4 (FIG14_COND 조건, 반복마다 점 1개)
 #                                      빨강: 채점함수 전치 (ak4 ≤ ak3), 회색 점선: 분자를 참값으로 고정한 b4
 #   fig15_nrm_cause           그림 15  전치 비율을 채점함수 전치 여부로 나눈 누적 막대 (그림 7·8·12와 같은 배치·축)
-#                                      채점함수 전치: 인접 채점함수 차이 ≤ 0 이 하나라도 있음
+#                                      채점함수 전치 = 기존 '채점함수 이상' (차이 ≤ 0 또는 |차이| < DAK_CUT)
 #   extra_nrm_sf_reversal_crc 예비     채점함수가 전치된 반복 1개의 범주반응곡선 (참 모형 vs NRM 추정)
 #
 # 표
@@ -70,19 +70,29 @@ if (nrow(c14) == 0) {
 # =============================================================================
 # 그림 15: 원인별 전치 비율 (그림 8과 같은 배치, 같은 y 범위)
 # =============================================================================
-# 전치된 반복을 채점함수 전치 여부로만 나눔 (극단 오차 기준은 쓰지 않음)
-#   채점함수 전치: 인접 채점함수 차이 ak_k − ak_{k−1} ≤ 0 인 k 가 하나라도 있음 (k = 1..4)
+# 전치된 반복을 채점함수 전치 여부로만 나눠 누적 (극단 오차 기준은 쓰지 않음)
+#   기존 4가지 분류를 2가지로 합친 것과 같음
+#     채점함수 전치      = (극단 오차 + 채점함수 이상) + (채점함수 이상만)
+#     채점함수 전치 없음 = (극단 오차만) + (둘 다 아님)
+#   채점함수 이상(기존 정의): 인접 채점함수 차이 ak_k − ak_{k−1} ≤ 0 (전치)
+#                             또는 |차이| < DAK_CUT (분모 붕괴) 인 k 가 하나라도 있음
+#   FIG15_SF_DEF = "reversal" 이면 분모 붕괴는 빼고 차이 ≤ 0 만 셈
 cause_levels <- c("sf_rev", "sf_ok")
 cause_labels <- c(sf_rev = "채점함수 전치", sf_ok = "채점함수 전치 없음")
 cause_cols   <- c(sf_rev = "#D55E00", sf_ok = "#999999")
 
-message("  그림 15: 전치 반복을 '채점함수 전치 / 전치 없음' 두 가지로 나눠 그림")
+sf_def <- if (exists("FIG15_SF_DEF")) FIG15_SF_DEF else "issue"
+dak15  <- with(reps2, cbind(ak1 - ak0, ak2 - ak1, ak3 - ak2, ak4 - ak3))
+reps2$rev_flag <- if (sf_def == "reversal") apply(dak15 <= 0, 1, any) else
+                apply(dak15 <= 0 | abs(dak15) < DAK_CUT, 1, any)
+message(sprintf("  그림 15: 전치 반복을 '채점함수 전치 / 전치 없음' 두 가지로 누적 (채점함수 전치 = %s)",
+                if (sf_def == "reversal") "차이 ≤ 0" else sprintf("차이 ≤ 0 또는 |차이| < %g", DAK_CUT)))
 cause <- reps2 %>%
-  mutate(sf_rev = (ak1 - ak0) <= 0 | (ak2 - ak1) <= 0 | (ak3 - ak2) <= 0 | (ak4 - ak3) <= 0) %>%
   group_by(f_sf, f_int, f_mean) %>%
   summarise(n      = n(),
-            sf_rev = sum(transposed & sf_rev) / n,
-            sf_ok  = sum(transposed & !sf_rev) / n,
+            # 요약 열 이름(sf_rev)과 반복별 표시(rev_flag)를 다르게 둬야 아래 줄이 덮어쓴 값을 쓰지 않음
+            sf_rev = sum(transposed & rev_flag) / n,
+            sf_ok  = sum(transposed & !rev_flag) / n,
             .groups = "drop")
 cause_long <- cause %>%
   pivot_longer(all_of(cause_levels), names_to = "cause", values_to = "prop") %>%
