@@ -10,6 +10,7 @@ source("R_graph/00_config.R", encoding = "UTF-8")
 
 # ── 00_config.R 에 없는 설정은 기본값으로 채움 (예전 00_config.R 을 그대로 써도 동작) ──
 .cfg_default <- list(TRANS_YMAX = 1,
+                     FIG11_B3_ABOVE_COND = c(sf4 = 3.66, interval = 0.5, mean = 0),
                      FIG05_FIXED = c(sf4 = 3, interval = 1, mean = 0),
                      FIG11_POINT_ALPHA = 0.25, OUTLIER_UNIT = "rep", DAK_CUT = 0.1,
                      FIG14_SHOW_CURVE = TRUE, SAVE_PDF = FALSE)

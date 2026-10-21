@@ -59,6 +59,7 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `fig11_2_b4_curves_theta` | 결과1 편향 원리 | 11-1 + 범주 4·5 응답자 θ (y = 0, 반투명, 초록 θ < b4, 파랑 θ ≥ b4) |
 | `fig11_3_b3_curves` | 결과1 편향 원리 | 범주 3·4: 참 / GPCM 문항특성곡선 (두 곡선 모두 참 b3 에 위치) |
 | `fig11_4_b3_curves_theta` | 결과1 편향 원리 | 11-3 + 범주 3·4 응답자 θ |
+| `extra_fig11_b3_above_*` | 질의응답 예비 | θ ≥ b3 응답자가 더 많은 조건의 11-3·11-4 (`FIG11_B3_ABOVE_COND`) |
 | `fig12_sim2_transposition` | 결과2 전치 비율 | NRM 전치 비율 (그림 7과 같은 축) |
 | `fig12b_transposition_difference` | 결과2 전치 비율 | NRM − GPCM 전치 비율 차이 |
 | `fig13_sim2_rmse_b3b4` / `_b1b4` | 결과2 RMSE | NRM RMSE (이상치 제거 후) |

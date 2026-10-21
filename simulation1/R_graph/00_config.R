@@ -65,6 +65,7 @@ TRANS_YMAX <- 1
 # 그림 11-1~11-4: 문항특성곡선 + 응답자 θ
 FIG11_B4_COND <- c(sf4 = 3.66, interval = 1.5, mean = 1)   # b4 (과소추정) 조건
 FIG11_B3_COND <- c(sf4 = 3.66, interval = 1.5, mean = 1)   # b3 (과대추정) 조건
+FIG11_B3_ABOVE_COND <- c(sf4 = 3.66, interval = 0.5, mean = 0)  # 예비: θ ≥ b3 응답자가 더 많은 조건 (NULL 이면 안 그림)
 FIG11_REP     <- NULL   # 점으로 찍을 반복 번호. NULL = 추정값이 조건 평균에 가장 가까운 반복
 FIG11_XLIM    <- c(-3, 6)
 FIG11_POINT_ALPHA <- 0.25  # 점 투명도 (작을수록 투명, 겹칠수록 진해짐)

@@ -7,6 +7,7 @@
 #   fig11_2_b4_curves_theta       그림 11-2  11-1 + 범주 4·5 응답자 θ (초록: θ < b4, 파랑: θ ≥ b4)
 #   fig11_3_b3_curves             그림 11-3  범주 3·4 응답자의 참 / GPCM 문항특성곡선 (b3)
 #   fig11_4_b3_curves_theta       그림 11-4  11-3 + 범주 3·4 응답자 θ (초록: θ < b3, 파랑: θ ≥ b3)
+#   extra_fig11_b3_above_*        예비       θ ≥ b3 인 응답자가 더 많은 조건의 11-3·11-4 (FIG11_B3_ABOVE_COND)
 #   extra_kl_vs_sim_bias          예비       KL 극한으로 계산한 Bias vs 시뮬레이션 Bias
 #
 # 그림 11 의 곡선 (두 범주만 남겼을 때 높은 범주를 고를 확률)
@@ -119,9 +120,13 @@ make_fig11 <- function(cond, k, fig_a, fig_b) {
   # 점: 대표 반복에서 범주 k 또는 k+1 로 응답한 사람 (응답값 0~4 → 범주 = 응답값 + 1)
   #     모두 y = 0 에 찍고 투명도를 줘서 겹칠수록 진해짐
   rep  <- pick_rep(cr)
-  resp <- read_response(cond, rep)
+  resp <- tryCatch(read_response(cond, rep), error = function(e) { message("  [건너뜀] ", conditionMessage(e)); NULL })
+  if (is.null(resp)) return(invisible())
   pts  <- resp %>% filter(!is.na(theta), item1 %in% c(k - 1, k)) %>%
     mutate(side = factor(ifelse(theta < b_true, "below", "above"), levels = c("below", "above")))
+  message(sprintf("  %s: %s, 대표 반복 %d — 범주 %d·%d 응답자 %d명 (초록 θ < b%d: %d명, 파랑 θ ≥ b%d: %d명)",
+                  fig_b, cond_text(cond, sep = ", "), rep, k, k + 1, nrow(pts),
+                  k, sum(pts$side == "below"), k, sum(pts$side == "above")))
   n_out <- sum(pts$theta < FIG11_XLIM[1] | pts$theta > FIG11_XLIM[2])
   if (n_out > 0) message(sprintf("  [주의] %s: x축 범위 밖 점 %d개", fig_b, n_out))
 
@@ -133,7 +138,10 @@ make_fig11 <- function(cond, k, fig_a, fig_b) {
     scale_fill_manual(values = c(below = COL_BELOW, above = COL_ABOVE),
                       labels = side_lab, name = NULL, drop = FALSE) +
     guides(colour = guide_legend(order = 1), linetype = guide_legend(order = 1),
-           fill = guide_legend(order = 2, override.aes = list(size = PS + 1, alpha = 1)))
+           # 범례 점은 자료와 상관없이 항상 진한 초록·파랑 (한쪽 점이 0개여도 표시)
+           fill = guide_legend(order = 2, override.aes = list(
+             size = PS + 1, alpha = 1, shape = 21,
+             fill = c(COL_BELOW, COL_ABOVE), colour = c(COL_BELOW, COL_ABOVE))))
   save_fig(p_b, fig_b, 12, 8.5)
 
   fig11_rows[[length(fig11_rows) + 1]] <<- data.frame(
@@ -148,6 +156,9 @@ make_fig11 <- function(cond, k, fig_a, fig_b) {
 
 make_fig11(FIG11_B4_COND, 4, "fig11_1_b4_curves", "fig11_2_b4_curves_theta")
 make_fig11(FIG11_B3_COND, 3, "fig11_3_b3_curves", "fig11_4_b3_curves_theta")
+# 예비: b3 응답자 중 θ ≥ b3 인 사람이 더 많은 조건 (기본: 채점함수 0.33, 간격 0.5, 심각도 0)
+if (!is.null(FIG11_B3_ABOVE_COND))
+  make_fig11(FIG11_B3_ABOVE_COND, 3, "extra_fig11_b3_above_curves", "extra_fig11_b3_above_curves_theta")
 if (length(fig11_rows)) save_table(bind_rows(fig11_rows), "tab_fig11_summary")
 
 # =============================================================================
