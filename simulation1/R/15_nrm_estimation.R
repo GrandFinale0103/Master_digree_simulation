@@ -1,8 +1,9 @@
 # =============================================================================
 # 15_nrm_estimation.R  (simulation1)
-# 06_main.R 이 생성한 응답에 NRM(명명반응모형)을 적용하고,
-# 문항 1의 경계모수 b1~b4 와 그 SE, b3·b4 차이 검정을 반복마다 계산
-# (simulation2 의 11_nrm_estimation.R 과 같은 절차·같은 출력 열 + SE 열 추가)
+# 06_main.R 이 생성한 응답 중 정규분포 조건(조건 코드 넷째 자리 = 2, 3×3×3 = 27 조건)에만
+# NRM(명명반응모형)을 적용하고, 문항 1의 경계모수 b1~b4 와 그 SE, b3·b4 차이 검정을 반복마다 계산
+# (simulation2 의 11_nrm_estimation.R 과 같은 절차·같은 폴더·같은 출력 열 순서,
+#  SE 등 추가 열은 맨 뒤에 붙임)
 #
 # ── 1) NRM 추정 ───────────────────────────────────────────────────────────────
 #   mirt itemtype = "nominal" (SE = TRUE), 20문항 전체를 함께 추정
@@ -25,14 +26,16 @@
 # ── 5) 채점함수 전치 ──────────────────────────────────────────────────────────
 #   sf_rev_k = (ak_k ≤ ak_{k-1}),  k = 1..4  (b_k 분모와 같은 위치), sf_transposed_any = 하나라도
 #
-# ── 척도 주의 (균등분포 조건) ────────────────────────────────────────────────
-#   mirt 는 θ ~ N(0, 1) 로 척도를 고정하므로 추정값은 평균 0, 분산 1 척도에 있음
-#   정규·편포 조건은 생성 분포도 평균 0, 분산 1 → 생성 척도와 같음
-#   균등분포 U(−4, 4) 는 표준편차 8/√12 ≈ 2.31 → 참값과 비교할 때 b / 2.31 로 바꿔야 함
-#   (13_analysis_limit_bias.R 의 b_true_std 와 같은 처리)
+# ── 출력 열 (반복당 1행) ──────────────────────────────────────────────────────
+#   simulation2 11번과 같은 열·같은 순서:
+#     cond_code, rep_id, seed, success, converged, se_ok, a1, ak0~ak4, d0~d4, b1~b4,
+#     diff_b4_b3, se_diff, z, p_value, reject_h0, transposed_34, transposed_any,
+#     sf_rev_1~sf_rev_4, sf_transposed_any, error
+#   추가 열 (맨 뒤): n_persons, n_ghost, se_a1, se_ak1~se_ak3, se_d1~se_d4, se_b1~se_b4
+#   조건 코드만 simulation1 형식(4자리)이고 나머지는 같음
 #
-# 입력 : output/responses/*_response.csv  (조건 코드 4자리, 06_main.R 출력 그대로)
-# 출력 : output/nrm/estimated_params/<응답파일명>_nrm.csv  (반복당 1행)
+# 입력 : output/responses/*_cond???2_rep*_response.csv  (정규분포 조건, 06_main.R 출력 그대로)
+# 출력 : output/nrm/estimated_params/<응답파일명>_nrm.csv  (반복당 1행, simulation2 와 같은 폴더 구조)
 #        output/nrm/15_log.txt
 #
 # 이미 결과 파일이 있는 반복은 건너뜀 → 중단 후 다시 실행하면 이어서 진행
@@ -42,10 +45,8 @@
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║                          사용자 설정 영역                                 ║
 # ╠══════════════════════════════════════════════════════════════════════════╣
-COND_CODES_OVERRIDE <- NULL   # NULL = 응답 파일이 있는 모든 조건. 예: c("3112", "3114")
-THETA_DIST_DIGITS   <- NULL   # 조건 코드 넷째 자리로 능력 분포 선택. NULL = 전부
-                              # 1 = 정적편포, 2 = 정규, 3 = 부적편포, 4 = 균등
-                              # 예: 정규분포만 → "2"
+COND_CODES_OVERRIDE <- NULL   # NULL = 정규분포 27 조건 전부. 일부만: 예) c("1112", "3332")
+                              # (정규분포 조건, 즉 넷째 자리가 2 인 코드만 유효)
 USE_PARALLEL <- TRUE
 N_CORES      <- max(1L, parallel::detectCores(logical = FALSE) - 1L)
 BATCH_SIZE   <- 200L          # 배치당 파일 수 (진행 표시·메모리 관리용)
@@ -83,21 +84,22 @@ fit_nrm_one <- function(resp_path, out_dir, z_crit) {
 
   par_names  <- c("a1", paste0("ak", 0:4), paste0("d", 0:4))
   free_names <- c("a1", paste0("ak", 1:3), paste0("d", 1:4))
+  # 앞부분: simulation2 11번과 같은 열·순서 / 뒷부분: simulation1 추가 열
   row <- c(
     list(cond_code = sub(".*_cond([0-9]+)_.*", "\\1", base),
          rep_id    = as.integer(sub(".*_rep([0-9]+)_.*", "\\1", base)),
          seed      = sub(".*_seed([0-9]+)$", "\\1", base),
-         n_persons = NA_integer_, n_ghost = NA_integer_,
          success   = FALSE, converged = NA, se_ok = FALSE),
     setNames(as.list(rep(NA_real_, length(par_names))), par_names),
-    setNames(as.list(rep(NA_real_, length(free_names))), paste0("se_", free_names)),
     list(b1 = NA_real_, b2 = NA_real_, b3 = NA_real_, b4 = NA_real_,
-         se_b1 = NA_real_, se_b2 = NA_real_, se_b3 = NA_real_, se_b4 = NA_real_,
          diff_b4_b3 = NA_real_, se_diff = NA_real_,
          z = NA_real_, p_value = NA_real_, reject_h0 = NA,
          transposed_34 = NA, transposed_any = NA,
          sf_rev_1 = NA, sf_rev_2 = NA, sf_rev_3 = NA, sf_rev_4 = NA,
-         sf_transposed_any = NA, error = "")
+         sf_transposed_any = NA, error = ""),
+    list(n_persons = NA_integer_, n_ghost = NA_integer_),
+    setNames(as.list(rep(NA_real_, length(free_names))), paste0("se_", free_names)),
+    list(se_b1 = NA_real_, se_b2 = NA_real_, se_b3 = NA_real_, se_b4 = NA_real_)
   )
 
   res <- tryCatch({
@@ -199,16 +201,14 @@ fit_nrm_one <- function(resp_path, out_dir, z_crit) {
 # =============================================================================
 # 실행
 # =============================================================================
-resp_files <- list.files(RESP_DIR, pattern = "_cond[0-9]{4}_rep[0-9]+_.*_response\\.csv$",
+# 정규분포 조건만 (조건 코드 넷째 자리 = 2)
+resp_files <- list.files(RESP_DIR, pattern = "_cond[0-9]{3}2_rep[0-9]+_.*_response\\.csv$",
                          full.names = TRUE)
-if (length(resp_files) == 0) stop("응답 파일이 없습니다: ", RESP_DIR)
+if (length(resp_files) == 0) stop("정규분포 조건 응답 파일이 없습니다: ", RESP_DIR)
 
-fc <- sub(".*_cond([0-9]+)_.*", "\\1", basename(resp_files))
 if (!is.null(COND_CODES_OVERRIDE)) {
-  resp_files <- resp_files[fc %in% COND_CODES_OVERRIDE]; fc <- fc[fc %in% COND_CODES_OVERRIDE]
-}
-if (!is.null(THETA_DIST_DIGITS)) {
-  resp_files <- resp_files[substr(fc, 4, 4) %in% THETA_DIST_DIGITS]
+  fc <- sub(".*_cond([0-9]+)_.*", "\\1", basename(resp_files))
+  resp_files <- resp_files[fc %in% COND_CODES_OVERRIDE]
 }
 if (length(resp_files) == 0) stop("선택한 조건에 해당하는 응답 파일이 없습니다.")
 
@@ -216,7 +216,7 @@ done_base  <- sub("_nrm\\.csv$", "", list.files(NRM_DIR, pattern = "_nrm\\.csv$"
 todo_files <- resp_files[!sub("_response\\.csv$", "", basename(resp_files)) %in% done_base]
 
 lg("================================================================")
-lg(sprintf("NRM 추정 시작 (simulation1) — 응답 파일 %d개 (조건 %d개), 완료 %d개, 남은 파일 %d개",
+lg(sprintf("NRM 추정 시작 (simulation1, 정규분포 조건) — 응답 파일 %d개 (조건 %d개), 완료 %d개, 남은 파일 %d개",
            length(resp_files),
            length(unique(sub(".*_cond([0-9]+)_.*", "\\1", basename(resp_files)))),
            length(resp_files) - length(todo_files), length(todo_files)))
