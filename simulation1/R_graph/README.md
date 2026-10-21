@@ -95,6 +95,7 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | `SF_GAP_LABEL` | 1 / 0.66 / 0.33 | 채점함수 간격 라벨 (실제 4 − s4 = 1 / 0.67 / 0.34) |
 | `ERR_CUT`, `OUTLIER_UNIT` | 3, `"rep"` | NRM 이상치: \|b̂ − b\| ≥ 3 인 값이 있는 반복 전체 제거 (simulation2 16번과 같음). `"param"` 이면 그 값만 제거 |
 | `FIG11_B4_COND`, `FIG11_B3_COND` | 0.33 · 1.5 · 1.0 | 그림 11 조건 |
+| `FIG11_B4_AUTO`, `FIG11_MIN_ABOVE` | TRUE, 3 | 그림 11-1·11-2 조건에 θ ≥ b4 응답자가 3명보다 적으면 b4 과소추정이 큰 다른 조건으로 자동 변경 |
 | `FIG11_REP` | `NULL` | 그림 11 점에 쓸 반복 (NULL = 추정값이 조건 평균에 가장 가까운 반복) |
 | `FIG11_POINT_ALPHA` | 0.25 | 그림 11 점 투명도 (겹칠수록 진해짐) |
 | `TRANS_YMAX` | 1 | 전치 비율 그림의 y축 최댓값 (100%). 쌍별 누적 합이 넘으면 자동으로 늘림 |

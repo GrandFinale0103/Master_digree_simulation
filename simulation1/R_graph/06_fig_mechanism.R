@@ -20,6 +20,9 @@
 #              (FIG11_REP = NULL 이면 b̂3·b̂4 가 조건 평균에 가장 가까운 반복, 유령 응답자 제외)
 #              모두 y = 0 에 찍고 투명도(FIG11_POINT_ALPHA)를 줘서 겹칠수록 진해짐
 #   네 그림 모두 x축·y축 범위가 같음
+#   11-1·11-2 조건: FIG11_B4_COND 의 대표 반복에 θ ≥ b4 응답자가 FIG11_MIN_ABOVE 명보다 적으면
+#                   (FIG11_B4_AUTO = TRUE 일 때) b4 가 과소추정되는 조건 중 과소추정이 큰 순서로
+#                   살펴 기준을 넘는 첫 조건으로 자동으로 바꿈 (11-1 과 11-2 는 항상 같은 조건)
 #
 # 표
 #   tab_fig11_summary   그림 11 에 쓴 값 (참값, 추정 평균, 대표 반복, 초록·파랑 점 수)
@@ -80,6 +83,46 @@ read_response <- function(cond, rep) {
   read.csv(sort(files)[length(files)])
 }
 
+# 대표 반복에서 범주 k 또는 k+1 로 응답한 사람 (응답값 0~4 → 범주 = 응답값 + 1, 유령 응답자 제외)
+fig11_points <- function(cond, k, quiet = FALSE) {
+  cr <- reps1[match_cond(reps1, cond), ]
+  if (nrow(cr) == 0) return(NULL)
+  rep  <- pick_rep(cr)
+  resp <- tryCatch(read_response(cond, rep), error = function(e) {
+    if (!quiet) message("  [건너뜀] ", conditionMessage(e)); NULL })
+  if (is.null(resp)) return(NULL)
+  b_true <- cr[[paste0("b", k, "_true")]][1]
+  pts <- resp %>% filter(!is.na(theta), item1 %in% c(k - 1, k)) %>%
+    mutate(side = factor(ifelse(theta < b_true, "below", "above"), levels = c("below", "above")))
+  list(rep = rep, pts = pts)
+}
+
+# 그림 11-1·11-2 조건 고르기
+#   FIG11_B4_COND 에서 θ ≥ b4 인 응답자가 FIG11_MIN_ABOVE 명보다 적으면,
+#   b4 가 과소추정되는 다른 조건을 과소추정이 큰 순서로 살펴 처음으로 기준을 넘는 조건을 씀
+choose_b4_cond <- function() {
+  cnt <- function(cd) { p <- fig11_points(cd, 4, quiet = TRUE)
+                        if (is.null(p)) NA_integer_ else sum(p$pts$side == "above") }
+  n0 <- cnt(FIG11_B4_COND)
+  if (!isTRUE(FIG11_B4_AUTO) || (!is.na(n0) && n0 >= FIG11_MIN_ABOVE)) return(FIG11_B4_COND)
+  message(sprintf("  그림 11-2: %s 의 대표 반복에서 θ ≥ b4 응답자 %s명 → 다른 조건을 찾음",
+                  cond_text(FIG11_B4_COND, sep = ", "), ifelse(is.na(n0), "?", n0)))
+  cand <- reps1 %>% group_by(sf4, interval, mean) %>%
+    summarise(bias = mean(b4 - b4_true), .groups = "drop") %>%
+    filter(bias < 0) %>% arrange(bias)
+  for (i in seq_len(nrow(cand))) {
+    cd <- c(sf4 = cand$sf4[i], interval = cand$interval[i], mean = cand$mean[i])
+    n  <- cnt(cd)
+    if (!is.na(n) && n >= FIG11_MIN_ABOVE) {
+      message(sprintf("  → %s 사용 (b4 Bias %.3f, θ ≥ b4 응답자 %d명)",
+                      cond_text(cd, sep = ", "), cand$bias[i], n))
+      return(cd)
+    }
+  }
+  message("  [주의] 기준을 넘는 조건이 없어 FIG11_B4_COND 를 그대로 씀")
+  FIG11_B4_COND
+}
+
 THETA11 <- seq(FIG11_XLIM[1], FIG11_XLIM[2], length.out = 400)
 Y11     <- c(0, 1.06)
 fig11_rows <- list()
@@ -114,16 +157,16 @@ make_fig11 <- function(cond, k, fig_a, fig_b) {
                        limits = FIG11_XLIM) +
     scale_y_continuous(breaks = seq(0, 1, 0.25), limits = Y11) +
     labs(x = LAB$theta, y = LAB$prob) +
-    theme_thesis()
+    theme_thesis() +
+    # 범례 칸 높이를 고정 → 11-1 과 11-2 의 그림 영역이 정확히 같아 슬라이드에서 겹쳐도 맞음
+    theme(legend.key.height = unit(2, "lines"))
   save_fig(base, fig_a, 12, 8.5)   # 점 그림과 같은 크기 → 슬라이드에서 겹쳐도 곡선 위치가 같음
 
   # 점: 대표 반복에서 범주 k 또는 k+1 로 응답한 사람 (응답값 0~4 → 범주 = 응답값 + 1)
   #     모두 y = 0 에 찍고 투명도를 줘서 겹칠수록 진해짐
-  rep  <- pick_rep(cr)
-  resp <- tryCatch(read_response(cond, rep), error = function(e) { message("  [건너뜀] ", conditionMessage(e)); NULL })
-  if (is.null(resp)) return(invisible())
-  pts  <- resp %>% filter(!is.na(theta), item1 %in% c(k - 1, k)) %>%
-    mutate(side = factor(ifelse(theta < b_true, "below", "above"), levels = c("below", "above")))
+  pp <- fig11_points(cond, k)
+  if (is.null(pp)) return(invisible())
+  rep <- pp$rep; pts <- pp$pts
   message(sprintf("  %s: %s, 대표 반복 %d — 범주 %d·%d 응답자 %d명 (초록 θ < b%d: %d명, 파랑 θ ≥ b%d: %d명)",
                   fig_b, cond_text(cond, sep = ", "), rep, k, k + 1, nrow(pts),
                   k, sum(pts$side == "below"), k, sum(pts$side == "above")))
@@ -154,7 +197,7 @@ make_fig11 <- function(cond, k, fig_a, fig_b) {
     check.names = FALSE)
 }
 
-make_fig11(FIG11_B4_COND, 4, "fig11_1_b4_curves", "fig11_2_b4_curves_theta")
+make_fig11(choose_b4_cond(), 4, "fig11_1_b4_curves", "fig11_2_b4_curves_theta")
 make_fig11(FIG11_B3_COND, 3, "fig11_3_b3_curves", "fig11_4_b3_curves_theta")
 # 예비: b3 응답자 중 θ ≥ b3 인 사람이 더 많은 조건 (기본: 채점함수 0.33, 간격 0.5, 심각도 0)
 if (!is.null(FIG11_B3_ABOVE_COND))

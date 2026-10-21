@@ -66,6 +66,8 @@ TRANS_YMAX <- 1
 
 # 그림 11-1~11-4: 문항특성곡선 + 응답자 θ
 FIG11_B4_COND <- c(sf4 = 3.66, interval = 1.5, mean = 1)   # b4 (과소추정) 조건
+FIG11_B4_AUTO   <- TRUE  # 위 조건에 θ ≥ b4 응답자가 적으면 다른 과소추정 조건으로 자동 변경
+FIG11_MIN_ABOVE <- 3     # θ ≥ b4 응답자가 이 수 이상인 조건을 찾음
 FIG11_B3_COND <- c(sf4 = 3.66, interval = 1.5, mean = 1)   # b3 (과대추정) 조건
 FIG11_B3_ABOVE_COND <- c(sf4 = 3.66, interval = 0.5, mean = 0)  # 예비: θ ≥ b3 응답자가 더 많은 조건 (NULL 이면 안 그림)
 FIG11_REP     <- NULL   # 점으로 찍을 반복 번호. NULL = 추정값이 조건 평균에 가장 가까운 반복
