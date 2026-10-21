@@ -76,7 +76,9 @@ cause_levels <- c("sf_rev", "sf_ok")
 cause_labels <- c(sf_rev = "채점함수 전치", sf_ok = "채점함수 전치 없음")
 cause_cols   <- c(sf_rev = "#D55E00", sf_ok = "#999999")
 
+message("  그림 15: 전치 반복을 '채점함수 전치 / 전치 없음' 두 가지로 나눠 그림")
 cause <- reps2 %>%
+  mutate(sf_rev = (ak1 - ak0) <= 0 | (ak2 - ak1) <= 0 | (ak3 - ak2) <= 0 | (ak4 - ak3) <= 0) %>%
   group_by(f_sf, f_int, f_mean) %>%
   summarise(n      = n(),
             sf_rev = sum(transposed & sf_rev) / n,
