@@ -16,7 +16,7 @@
 #       interval_true = 실제 생성에 쓴 수준 (1.4) → 참값 계산에 사용
 #   어느 쪽이든 저장 파일 이름은 sim2_nrm_item1.rds (그림 스크립트는 그대로 사용)
 #
-# 출력: R_graph/output/data/
+# 출력: <GRAPH_DIR>/data/  (00_config.R — 기본 R_graph/output_sim1nrm/data/, NRM_SOURCE = "sim2" 면 R_graph/output/data/)
 #   sim1_gpcm_item1.rds — 반복별 문항 1 GPCM 추정값 (a, b1~b4) 과 참값
 #   sim2_nrm_item1.rds  — 반복별 문항 1 NRM 추정값 (a1, ak0~ak4, d0~d4, b1~b4) 과 참값
 #                         (이름은 예전 그대로지만 NRM_SOURCE = "sim1" 이면 시뮬레이션1 NRM 결과)

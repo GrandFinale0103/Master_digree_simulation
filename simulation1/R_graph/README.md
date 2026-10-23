@@ -17,14 +17,19 @@ setwd("경로/simulation1")
 source("R_graph/run_all.R", encoding = "UTF-8")
 ```
 
-- `01_collect_data.R` 이 결과 파일을 읽어 `R_graph/output/data/` 에 한 번만 저장합니다 (가장 오래 걸림).
+- `01_collect_data.R` 이 결과 파일을 읽어 `<출력 폴더>/data/` 에 한 번만 저장합니다 (가장 오래 걸림).
   결과 파일이 바뀌지 않았으면 `run_all.R` 의 `COLLECT <- FALSE` 로 건너뛸 수 있습니다.
 - 그림 하나만 다시 그리려면 해당 스크립트만 실행합니다. 예: `source("R_graph/06_fig_mechanism.R", encoding = "UTF-8")`
 - 필요한 패키지: dplyr, tidyr, ggplot2, scales, ragg, car (없으면 자동 설치)
 
-출력
-- 그림: `R_graph/output/figures/*.png`
-- 표: `R_graph/output/tables/*.csv` (UTF-8 BOM, 엑셀에서 한글이 깨지지 않음)
+출력 폴더는 `00_config.R` 의 `NRM_SOURCE` 에 따라 나뉩니다 (서로 덮어쓰지 않음, `GRAPH_DIR` 로 직접 바꿀 수도 있음)
+- `NRM_SOURCE <- "sim1"` (기본): `R_graph/output_sim1nrm/`
+- `NRM_SOURCE <- "sim2"` (예전 방식): `R_graph/output/` (기존 그림이 있던 폴더)
+
+각 출력 폴더 안
+- 그림: `figures/*.png`
+- 표: `tables/*.csv` (UTF-8 BOM, 엑셀에서 한글이 깨지지 않음)
+- 정리 자료: `data/*.rds`
 
 ## 사용하는 자료
 

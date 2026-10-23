@@ -18,7 +18,11 @@ SIM2_OUTPUT <- "../simulation2/output"     # 시뮬레이션2 결과 폴더 (NRM
 #   "sim2": 시뮬레이션2 NRM 결과에서 같은 조건을 가져옴 (예전 방식, 간격 1.5 대신 1.4 — SIM2_SUBSTITUTE_IV2)
 NRM_SOURCE <- "sim1"
 
-GRAPH_DIR <- "R_graph/output"
+# 그림·표·정리 자료를 저장할 폴더 — NRM 자료 출처마다 따로 저장 (서로 덮어쓰지 않음)
+#   "sim2" (예전 방식) → R_graph/output         (기존 그림이 있던 폴더 그대로)
+#   "sim1"             → R_graph/output_sim1nrm
+#   다른 폴더를 쓰려면 아래 줄을 직접 경로로 바꾸면 됨. 예: GRAPH_DIR <- "R_graph/output_발표용"
+GRAPH_DIR <- if (NRM_SOURCE == "sim1") "R_graph/output_sim1nrm" else "R_graph/output"
 DATA_DIR  <- file.path(GRAPH_DIR, "data")      # 01_collect_data.R 가 만든 정리 자료
 FIG_DIR   <- file.path(GRAPH_DIR, "figures")   # 그림 (PNG)
 TAB_DIR   <- file.path(GRAPH_DIR, "tables")    # 표 (CSV, 엑셀에서 바로 열림)

@@ -6,7 +6,7 @@
 #           source("R_graph/run_all.R", encoding = "UTF-8")
 #
 # COLLECT = FALSE 로 두면 01_collect_data.R (결과 파일 읽기, 가장 오래 걸림)를 건너뛰고
-# 이미 저장된 R_graph/output/data/*.rds 를 사용
+# 이미 저장된 <GRAPH_DIR>/data/*.rds 를 사용 (GRAPH_DIR 은 00_config.R 에서 정함)
 # =============================================================================
 
 COLLECT <- TRUE
@@ -38,5 +38,6 @@ if (length(failed)) {
   message("       output/figures 에 예전 그림이 남아 있을 수 있습니다:")
   for (f in failed) message("  - ", f)
 } else {
-  message("\n완료: 그림 R_graph/output/figures/, 표 R_graph/output/tables/")
+  .cfg <- new.env(); sys.source("R_graph/00_config.R", envir = .cfg, keep.source = FALSE)
+  message(sprintf("\n완료: 그림 %s/, 표 %s/", .cfg$FIG_DIR, .cfg$TAB_DIR))
 }
