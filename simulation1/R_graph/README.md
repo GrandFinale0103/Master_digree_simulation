@@ -31,12 +31,18 @@ source("R_graph/run_all.R", encoding = "UTF-8")
 | 자료 | 경로 | 조건 |
 |---|---|---|
 | 시뮬레이션1 (GPCM 추정) | `output/estimated_params/`, `output/responses/` | 정규분포 27개 조건 (조건 코드 넷째 자리 2) |
-| 시뮬레이션2 (NRM 추정) | `../simulation2/output/nrm/estimated_params/` | 시뮬레이션1과 같은 27개 조건만 (임시) |
+| NRM 추정 (기본) | `output/nrm/estimated_params/` (`R/15_nrm_estimation.R` 출력) | 시뮬레이션1과 같은 응답, 정규분포 27개 조건 |
+| NRM 추정 (예전 방식) | `../simulation2/output/nrm/estimated_params/` | `NRM_SOURCE <- "sim2"` 일 때만, 같은 27개 조건 |
 
-**임시 대체:** 시뮬레이션2에는 경계모수 간격 1.5 가 없어서 **1.4 결과를 가져와 1.5 로 표시**합니다.
-편향·RMSE 의 참값은 실제 생성에 쓴 1.4 로 계산합니다.
-시뮬레이션1 자료로 NRM 을 추정한 뒤에는 `00_config.R` 의 `SIM2_OUTPUT` 경로와
-`SIM2_SUBSTITUTE_IV2` 를 바꾸면 됩니다. 시뮬레이션2 자료가 없으면 NRM 그림만 건너뜁니다.
+NRM 자료는 `00_config.R` 의 `NRM_SOURCE` 로 고릅니다.
+
+- `"sim1"` (기본): 시뮬레이션1 응답에 NRM 을 추정한 결과를 씁니다. 먼저 `source("R/15_nrm_estimation.R")` 로 추정해 두어야 합니다.
+  GPCM 그림과 같은 응답·같은 조건이므로 경계모수 간격 1.5 도 그대로 씁니다.
+- `"sim2"`: 예전 임시 방식. 시뮬레이션2에는 경계모수 간격 1.5 가 없어서 1.4 결과를 가져와 1.5 로 표시하고,
+  편향·RMSE 의 참값은 1.4 로 계산합니다 (`SIM2_SUBSTITUTE_IV2`).
+
+어느 쪽이든 정리 자료 이름은 `sim2_nrm_item1.rds` 이고, 그림 파일 이름(`fig12_sim2_*` 등)도 예전 그대로입니다.
+NRM 결과가 없으면 NRM 그림만 건너뜁니다.
 
 ## 그림 목록
 

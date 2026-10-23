@@ -5,21 +5,29 @@
 # 시뮬레이션1 (GPCM 추정): 정규분포 27개 조건
 #   입력: output/estimated_params/*_cond[C]_rep[R]_seed[S]_est_params.csv  (C 넷째 자리 = 2)
 #
-# 시뮬레이션2 (NRM 추정): 시뮬레이션1과 같은 27개 조건만 (임시)
-#   입력: ../simulation2/output/nrm/estimated_params/*_nrm.csv
-#   경계모수 간격 1.5 는 시뮬레이션2에 없으므로 1.4 결과를 가져옴 (00_config.R 의 SIM2_SUBSTITUTE_IV2)
-#     interval      = 그래프에 쓰는 수준 (1.5)
-#     interval_true = 실제 생성에 쓴 수준 (1.4) → 참값 계산에 사용
+# NRM 추정 결과 (00_config.R 의 NRM_SOURCE 로 선택)
+#   "sim1" (기본): 시뮬레이션1 응답에 NRM 을 추정한 결과 (R/15_nrm_estimation.R)
+#     입력: output/nrm/estimated_params/*_cond[C]_rep[R]_seed[S]_nrm.csv  (C 넷째 자리 = 2)
+#     GPCM 과 같은 응답·같은 조건 코드 → interval_true = interval
+#   "sim2": 시뮬레이션2 결과에서 같은 27개 조건을 가져옴 (예전 임시 방식)
+#     입력: ../simulation2/output/nrm/estimated_params/*_nrm.csv
+#     경계모수 간격 1.5 는 시뮬레이션2에 없으므로 1.4 결과를 가져옴 (SIM2_SUBSTITUTE_IV2)
+#       interval      = 그래프에 쓰는 수준 (1.5)
+#       interval_true = 실제 생성에 쓴 수준 (1.4) → 참값 계산에 사용
+#   어느 쪽이든 저장 파일 이름은 sim2_nrm_item1.rds (그림 스크립트는 그대로 사용)
 #
 # 출력: R_graph/output/data/
 #   sim1_gpcm_item1.rds — 반복별 문항 1 GPCM 추정값 (a, b1~b4) 과 참값
 #   sim2_nrm_item1.rds  — 반복별 문항 1 NRM 추정값 (a1, ak0~ak4, d0~d4, b1~b4) 과 참값
+#                         (이름은 예전 그대로지만 NRM_SOURCE = "sim1" 이면 시뮬레이션1 NRM 결과)
 #   collect_log.txt     — 조건별 반복 수, 누락 조건
 #
 # 결과 파일이 새로 생기면 이 스크립트만 다시 실행
 # =============================================================================
 
 source("R_graph/00_functions.R", encoding = "UTF-8")
+if (!exists("NRM_SOURCE")) NRM_SOURCE <- "sim1"   # 예전 00_config.R 에 이 설정이 없으면 시뮬레이션1 NRM 사용
+if (!NRM_SOURCE %in% c("sim1", "sim2")) stop("00_config.R 의 NRM_SOURCE 는 \"sim1\" 또는 \"sim2\" 이어야 합니다.")
 
 log_lines <- character(0)
 lg <- function(...) { msg <- paste0(...); message(msg); log_lines <<- c(log_lines, msg) }
@@ -90,8 +98,53 @@ sim1 <- read_files(files1, read_gpcm) %>%
   mutate(interval_true = interval)
 check_counts(sim1, "시뮬레이션1", grid$code1)
 
+# NRM 결과 파일 1개 읽기 (시뮬레이션1·2 공통 — 열 이름이 같음)
+nrm_cols <- c("a1", paste0("ak", 0:4), paste0("d", 0:4), paste0("b", 1:4))
+read_nrm <- function(path) {
+  code <- sub(".*_cond([0-9]+)_.*", "\\1", basename(path))
+  rep  <- as.integer(sub(".*_rep([0-9]+)_.*", "\\1", basename(path)))
+  df   <- tryCatch(read_one(path), error = function(e) NULL)
+  row  <- data.frame(cond_code2 = code, rep_id = rep, converged = FALSE)
+  for (nm in nrm_cols) row[[nm]] <- NA_real_
+  if (is.null(df) || nrow(df) == 0) return(row)
+  row$converged <- as.logical(toupper(as.character(df$converged[1]))) %in% TRUE &
+                   as.logical(toupper(as.character(df$success[1]))) %in% TRUE
+  for (nm in intersect(nrm_cols, names(df))) row[[nm]] <- suppressWarnings(as.numeric(df[[nm]][1]))
+  row
+}
+
+if (NRM_SOURCE == "sim1") {
 # =============================================================================
-# 2. 시뮬레이션2 (NRM) — 시뮬레이션1과 같은 조건만
+# 2. NRM — 시뮬레이션1 응답에 추정한 결과 (R/15_nrm_estimation.R 출력)
+# =============================================================================
+lg("[시뮬레이션1] NRM 추정 결과 (R/15_nrm_estimation.R)")
+nrm_dir <- file.path(SIM1_OUTPUT, "nrm", "estimated_params")
+files2  <- list.files(nrm_dir, pattern = "_nrm\\.csv$", full.names = TRUE)
+code_f2 <- sub(".*_cond([0-9]+)_.*", "\\1", basename(files2))
+files2  <- dedupe_files(files2[code_f2 %in% grid$code1])
+
+if (length(files2) == 0) {
+  if (!dir.exists(nrm_dir)) {
+    lg(sprintf("  [경고] 시뮬레이션1 NRM 결과 폴더가 없습니다: %s", normalizePath(nrm_dir, mustWork = FALSE)))
+    lg("         먼저 R/15_nrm_estimation.R 을 실행하세요")
+  } else {
+    lg(sprintf("  [경고] %s 에 정규분포 27개 조건의 *_nrm.csv 파일이 없습니다 (폴더 안 파일 %d개)",
+               normalizePath(nrm_dir), length(code_f2)))
+  }
+  lg("         NRM 그래프(04·05·07·08번 일부)는 건너뜀")
+  sim2 <- NULL
+} else {
+  lg(sprintf("  파일 %d개 읽는 중...", length(files2)))
+  sim2 <- read_files(files2, read_nrm) %>%
+    left_join(grid %>% select(cond_code2 = code1, cond_code = code1, sf4, interval, mean),
+              by = "cond_code2") %>%
+    mutate(interval_true = interval)
+  check_counts(sim2, "시뮬레이션1 NRM", grid$code1)
+}
+
+} else {
+# =============================================================================
+# 2. 시뮬레이션2 (NRM) — 시뮬레이션1과 같은 조건만 (NRM_SOURCE = "sim2")
 # =============================================================================
 lg("[시뮬레이션2] NRM 추정 결과")
 sub_iv2 <- function(x) {
@@ -134,19 +187,6 @@ if (length(files2) == 0) {
   sim2 <- NULL
 } else {
   lg(sprintf("  파일 %d개 읽는 중...", length(files2)))
-  nrm_cols <- c("a1", paste0("ak", 0:4), paste0("d", 0:4), paste0("b", 1:4))
-  read_nrm <- function(path) {
-    code <- sub(".*_cond([0-9]+)_.*", "\\1", basename(path))
-    rep  <- as.integer(sub(".*_rep([0-9]+)_.*", "\\1", basename(path)))
-    df   <- tryCatch(read_one(path), error = function(e) NULL)
-    row  <- data.frame(cond_code2 = code, rep_id = rep, converged = FALSE)
-    for (nm in nrm_cols) row[[nm]] <- NA_real_
-    if (is.null(df) || nrow(df) == 0) return(row)
-    row$converged <- as.logical(toupper(as.character(df$converged[1]))) %in% TRUE &
-                     as.logical(toupper(as.character(df$success[1]))) %in% TRUE
-    for (nm in intersect(nrm_cols, names(df))) row[[nm]] <- suppressWarnings(as.numeric(df[[nm]][1]))
-    row
-  }
   # 조건 코드가 실제로 그 조건인지 시뮬레이션2 true_params 로 확인
   #   (수준 목록이 다르면 다른 조건의 코드와 우연히 맞을 수 있음)
   tp_dir   <- file.path(SIM2_OUTPUT, "true_params")
@@ -182,6 +222,7 @@ if (length(files2) == 0) {
                               interval_true = interval2, mean), by = "cond_code2")
   check_counts(sim2, "시뮬레이션2", grid$code1)
 }
+}   # NRM_SOURCE
 
 # =============================================================================
 # 3. 참값 붙여 저장
